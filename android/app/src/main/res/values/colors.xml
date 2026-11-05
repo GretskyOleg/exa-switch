@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="exa_bg">#050304</color>
-    <color name="exa_surface">#12090D</color>
-    <color name="exa_red">#FF2338</color>
-    <color name="exa_red_dark">#B00018</color>
-    <color name="exa_text">#F7E9EC</color>
-    <color name="exa_muted">#B18C93</color>
-</resources>

@@ -31,11 +31,15 @@
 ## EXA для Android
 
 Нативный VPN-клиент **EXA** для Android 10+: весь системный трафик через
-VLESS/Reality, тёмный фирменный интерфейс, профили, подписки, автоподключение.
+VLESS/Reality, тёмный фирменный интерфейс, подписки как в Happ, QR-импорт,
+маршрутизация Xray, per-app split tunneling и плитка в шторке.
 
-- Исходники и сборка: [`android/`](android/README.md)
-- APK: в релизах GitHub (`android-v0.1.0`)
+- Репозиторий: [GretskyOleg/exa-android](https://github.com/GretskyOleg/exa-android)
+- APK: [android-v0.1.0](https://github.com/GretskyOleg/exa-android/releases/tag/android-v0.1.0)
 - Внутри: Compose + `VpnService` + xray-core (`libv2ray`) + `hev-socks5-tunnel`.
+
+Исходники Android переехали в отдельный репозиторий; здесь остаются расширение,
+helper и установщики.
 
 ## Скриншоты
 

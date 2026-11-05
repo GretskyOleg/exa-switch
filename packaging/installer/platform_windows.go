@@ -124,22 +124,108 @@ func platformOpenSetup(setupPath string) error {
 	return exec.Command("cmd", "/c", "start", "", setupPath).Start()
 }
 
-func chromeExtensionRegistryRoots() []string {
-	return []string{
-		`Software\Google\Chrome\Extensions\`,
-		`Software\Google\Chrome Beta\Extensions\`,
-		`Software\Chromium\Extensions\`,
-		`Software\BraveSoftware\Brave-Browser\Extensions\`,
-		`Software\Microsoft\Edge\Extensions\`,
-		`Software\Vivaldi\Extensions\`,
+func chromeExtensionRegistryRootsFor(id string) []string {
+	switch id {
+	case "chrome":
+		return []string{
+			`Software\Google\Chrome\Extensions\`,
+			`Software\Google\Chrome Beta\Extensions\`,
+		}
+	case "chromium":
+		return []string{`Software\Chromium\Extensions\`}
+	case "edge":
+		return []string{`Software\Microsoft\Edge\Extensions\`}
+	case "brave":
+		return []string{`Software\BraveSoftware\Brave-Browser\Extensions\`}
+	case "vivaldi":
+		return []string{`Software\Vivaldi\Extensions\`}
 	}
+	return nil
+}
+
+func chromeExtensionRegistryRoots() []string {
+	var out []string
+	for _, id := range []string{"chrome", "chromium", "edge", "brave", "vivaldi"} {
+		out = append(out, chromeExtensionRegistryRootsFor(id)...)
+	}
+	return out
 }
 
 func firefoxProfileRoots() []string {
 	return []string{filepath.Join(os.Getenv("APPDATA"), "Mozilla", "Firefox", "Profiles")}
 }
 
-func platformPostInstall(paths installPaths) error {
+func platformDetectBrowsers() []string {
+	var out []string
+	firefoxPaths := []string{
+		filepath.Join(os.Getenv("ProgramFiles"), "Mozilla Firefox", "firefox.exe"),
+		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Mozilla Firefox", "firefox.exe"),
+	}
+	firefox := dirExists(filepath.Join(os.Getenv("APPDATA"), "Mozilla", "Firefox", "Profiles"))
+	for _, path := range firefoxPaths {
+		if fileExists(path) {
+			firefox = true
+		}
+	}
+	if firefox {
+		out = append(out, "firefox")
+	}
+
+	local := os.Getenv("LOCALAPPDATA")
+	pf := os.Getenv("ProgramFiles")
+	pf86 := os.Getenv("ProgramFiles(x86)")
+	checks := []struct {
+		id    string
+		paths []string
+		reg   string
+	}{
+		{"chrome", []string{
+			filepath.Join(local, "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(pf, "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(pf86, "Google", "Chrome", "Application", "chrome.exe"),
+		}, `Software\Google\Chrome`},
+		{"chromium", []string{
+			filepath.Join(local, "Chromium", "Application", "chrome.exe"),
+			filepath.Join(pf, "Chromium", "Application", "chrome.exe"),
+		}, `Software\Chromium`},
+		{"edge", []string{
+			filepath.Join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"),
+			filepath.Join(pf, "Microsoft", "Edge", "Application", "msedge.exe"),
+			filepath.Join(local, "Microsoft", "Edge", "Application", "msedge.exe"),
+		}, `Software\Microsoft\Edge`},
+		{"brave", []string{
+			filepath.Join(local, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+			filepath.Join(pf, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+		}, `Software\BraveSoftware\Brave-Browser`},
+		{"vivaldi", []string{
+			filepath.Join(local, "Vivaldi", "Application", "vivaldi.exe"),
+			filepath.Join(pf, "Vivaldi", "Application", "vivaldi.exe"),
+		}, `Software\Vivaldi`},
+	}
+	for _, check := range checks {
+		found := false
+		for _, path := range check.paths {
+			if fileExists(path) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if key, err := registry.OpenKey(registry.CURRENT_USER, check.reg, registry.QUERY_VALUE); err == nil {
+				key.Close()
+				found = true
+			}
+		}
+		if found {
+			out = append(out, check.id)
+		}
+	}
+	return out
+}
+
+func platformPostInstall(paths installPaths, browsers []string) error {
+	platformRemoveBrowserExtensions()
+
 	runKey := `Software\Microsoft\Windows\CurrentVersion\Run`
 	key, _, err := registry.CreateKey(registry.CURRENT_USER, runKey, registry.SET_VALUE)
 	if err != nil {
@@ -148,10 +234,15 @@ func platformPostInstall(paths installPaths) error {
 	_ = key.SetStringValue("XraySwitchHelper", `"`+paths.helperPath+`" ensure`)
 	key.Close()
 
-	installFirefoxProfiles(firefoxProfileRoots(), paths.firefoxXPI)
-
-	if paths.chromeCRX != "" {
-		for _, root := range chromeExtensionRegistryRoots() {
+	for _, id := range browsers {
+		if id == "firefox" {
+			installFirefoxProfiles(firefoxProfileRoots(), paths.firefoxXPI)
+			continue
+		}
+		if paths.chromeCRX == "" {
+			continue
+		}
+		for _, root := range chromeExtensionRegistryRootsFor(id) {
 			key, _, err := registry.CreateKey(registry.CURRENT_USER, root+chromeID, registry.SET_VALUE)
 			if err != nil {
 				continue
@@ -164,15 +255,19 @@ func platformPostInstall(paths installPaths) error {
 	return nil
 }
 
-func platformRemoveIntegration() {
-	if key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE); err == nil {
-		_ = key.DeleteValue("XraySwitchHelper")
-		key.Close()
-	}
+func platformRemoveBrowserExtensions() {
 	for _, root := range chromeExtensionRegistryRoots() {
 		_ = registry.DeleteKey(registry.CURRENT_USER, root+chromeID)
 	}
 	removeFirefoxProfiles(firefoxProfileRoots())
+}
+
+func platformRemoveIntegration() {
+	platformRemoveBrowserExtensions()
+	if key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE); err == nil {
+		_ = key.DeleteValue("XraySwitchHelper")
+		key.Close()
+	}
 }
 
 func platformNotify(title, message string) {

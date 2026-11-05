@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,11 +26,14 @@ const (
 )
 
 type options struct {
-	uninstall bool
-	purge     bool
-	silent    bool
-	noOpen    bool
-	help      bool
+	uninstall   bool
+	purge       bool
+	silent      bool
+	noOpen      bool
+	help        bool
+	browsers    string
+	allBrowsers bool
+	noBrowsers  bool
 }
 
 type payload struct {
@@ -57,10 +61,13 @@ func main() {
 	opts := parseArgs()
 	if opts.help {
 		fmt.Println("EXA Switch setup")
-		fmt.Println("  --uninstall   remove helper, native manifests and extension files")
-		fmt.Println("  --purge       with --uninstall also remove helper config/logs")
-		fmt.Println("  --silent      no prompts, do not open the browser")
-		fmt.Println("  --no-open     install but do not open the setup page")
+		fmt.Println("  --browsers=LIST  comma separated: firefox,chrome,chromium,edge,brave,vivaldi")
+		fmt.Println("  --all-browsers   install the extension into every detected browser")
+		fmt.Println("  --no-browsers    do not install browser extensions")
+		fmt.Println("  --uninstall      remove helper, native manifests and extension files")
+		fmt.Println("  --purge          with --uninstall also remove helper config/logs")
+		fmt.Println("  --silent         no prompts, default to Firefox if detected")
+		fmt.Println("  --no-open        install but do not open the setup page")
 		return
 	}
 	if opts.uninstall {
@@ -81,20 +88,101 @@ func main() {
 func parseArgs() options {
 	var o options
 	for _, arg := range os.Args[1:] {
-		switch strings.ToLower(arg) {
-		case "--uninstall", "/uninstall", "-uninstall":
+		lower := strings.ToLower(arg)
+		switch {
+		case lower == "--uninstall" || lower == "/uninstall" || lower == "-uninstall":
 			o.uninstall = true
-		case "--purge", "/purge":
+		case lower == "--purge" || lower == "/purge":
 			o.purge = true
-		case "--silent", "/silent", "/s":
+		case lower == "--silent" || lower == "/silent" || lower == "/s":
 			o.silent = true
-		case "--no-open", "/no-open":
+		case lower == "--no-open" || lower == "/no-open":
 			o.noOpen = true
-		case "--help", "/?", "-h":
+		case lower == "--help" || lower == "/?" || lower == "-h":
 			o.help = true
+		case lower == "--all-browsers" || lower == "/all-browsers":
+			o.allBrowsers = true
+		case lower == "--no-browsers" || lower == "/no-browsers":
+			o.noBrowsers = true
+		case strings.HasPrefix(lower, "--browsers=") ||
+			strings.HasPrefix(lower, "/browsers=") ||
+			strings.HasPrefix(lower, "--browser=") ||
+			strings.HasPrefix(lower, "/browser="):
+			if parts := strings.SplitN(arg, "=", 2); len(parts) == 2 {
+				o.browsers = parts[1]
+			}
 		}
 	}
 	return o
+}
+
+func chooseBrowsers(opts options, available []string) []string {
+	if opts.noBrowsers {
+		return nil
+	}
+	if opts.allBrowsers {
+		return append([]string(nil), available...)
+	}
+	if strings.TrimSpace(opts.browsers) != "" {
+		return parseBrowserSelection(opts.browsers, available)
+	}
+	if opts.silent {
+		for _, id := range available {
+			if id == "firefox" {
+				return []string{"firefox"}
+			}
+		}
+		return append([]string(nil), available...)
+	}
+	if len(available) == 0 {
+		fmt.Println("Браузеры не обнаружены. Расширение можно установить позже вручную.")
+		return nil
+	}
+
+	fmt.Println()
+	fmt.Println("Обнаружены браузеры:")
+	for i, id := range available {
+		fmt.Printf("  %d) %s\n", i+1, browserName(id))
+	}
+	fmt.Print("Куда установить расширение? [1,2 / all / none] (Enter = Firefox, если есть): ")
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(line)
+	if line == "" {
+		for _, id := range available {
+			if id == "firefox" {
+				return []string{"firefox"}
+			}
+		}
+		return append([]string(nil), available...)
+	}
+	return parseSelectionInput(line, available)
+}
+
+func parseSelectionInput(line string, available []string) []string {
+	lower := strings.ToLower(strings.TrimSpace(line))
+	if lower == "all" || lower == "*" {
+		return append([]string(nil), available...)
+	}
+	if lower == "none" || lower == "0" {
+		return nil
+	}
+	parts := strings.FieldsFunc(lower, func(r rune) bool {
+		return r == ',' || r == ' ' || r == ';'
+	})
+	var out []string
+	for _, part := range parts {
+		if n, err := strconv.Atoi(part); err == nil {
+			if n >= 1 && n <= len(available) {
+				out = append(out, available[n-1])
+			}
+			continue
+		}
+		if id := browserAliases[part]; id != "" {
+			out = append(out, id)
+		}
+	}
+	return dedupeBrowserIDs(out)
 }
 
 func install(opts options) error {
@@ -124,7 +212,9 @@ func install(opts options) error {
 		return fmt.Errorf("cannot register native messaging: %w", err)
 	}
 
-	if err := platformPostInstall(paths); err != nil {
+	available := platformDetectBrowsers()
+	selected := chooseBrowsers(opts, available)
+	if err := platformPostInstall(paths, selected); err != nil {
 		platformLog("browser integration warning: " + err.Error())
 	}
 
@@ -143,13 +233,22 @@ func install(opts options) error {
 	fmt.Println("  Chrome dir:  " + paths.chromeDir)
 	fmt.Println("  Firefox dir: " + paths.firefoxDir)
 	fmt.Println("  Setup page:  " + paths.setupPath)
+	if len(selected) == 0 {
+		fmt.Println("  Extensions:  не выбраны (--no-browsers / none)")
+	} else {
+		names := make([]string, 0, len(selected))
+		for _, id := range selected {
+			names = append(names, browserName(id))
+		}
+		fmt.Println("  Extensions:  " + strings.Join(names, ", "))
+	}
 
-	if !opts.silent && !opts.noOpen {
+	if !opts.silent && !opts.noOpen && hasChromeFamily(selected) {
 		if err := platformOpenSetup(paths.setupPath); err != nil {
 			fmt.Println("Open the setup page manually: " + paths.setupPath)
 		}
 	}
-	platformNotify("EXA Switch", "Helper installed. Finish browser setup in the opened page.")
+	platformNotify("EXA Switch", "Helper installed. Restart the selected browser(s).")
 	return nil
 }
 

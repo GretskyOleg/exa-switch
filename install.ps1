@@ -3,7 +3,10 @@
 
 param(
     [switch]$Uninstall,
-    [switch]$Purge
+    [switch]$Purge,
+    [string]$Browsers = "",
+    [switch]$AllBrowsers,
+    [switch]$NoBrowsers
 )
 
 $ErrorActionPreference = "Stop"
@@ -145,49 +148,144 @@ Write-Host "Chrome ID:   $chromeId"
 Write-Host "Firefox ID:  $FirefoxId"
 Write-Host "Helper:      $Exe"
 
+# --- choose browsers -----------------------------------------------------
+$detected = @()
+$pf = $env:ProgramFiles
+$pf86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+$local = $env:LOCALAPPDATA
+function Join-Base([string]$Base, [string]$Rel) {
+    if ([string]::IsNullOrWhiteSpace($Base)) { return $null }
+    return (Join-Path $Base $Rel)
+}
+if ((Test-Path (Join-Path $env:APPDATA "Mozilla\Firefox\Profiles")) -or
+    (Test-Path (Join-Base $pf "Mozilla Firefox\firefox.exe")) -or
+    (Test-Path (Join-Base $pf86 "Mozilla Firefox\firefox.exe"))) {
+    $detected += "firefox"
+}
+$checks = @(
+    @{ id = "chrome";   paths = @((Join-Base $local "Google\Chrome\Application\chrome.exe"), (Join-Base $pf "Google\Chrome\Application\chrome.exe"), (Join-Base $pf86 "Google\Chrome\Application\chrome.exe")) },
+    @{ id = "chromium"; paths = @((Join-Base $local "Chromium\Application\chrome.exe"), (Join-Base $pf "Chromium\Application\chrome.exe")) },
+    @{ id = "edge";     paths = @((Join-Base $pf86 "Microsoft\Edge\Application\msedge.exe"), (Join-Base $pf "Microsoft\Edge\Application\msedge.exe"), (Join-Base $local "Microsoft\Edge\Application\msedge.exe")) },
+    @{ id = "brave";    paths = @((Join-Base $local "BraveSoftware\Brave-Browser\Application\brave.exe"), (Join-Base $pf "BraveSoftware\Brave-Browser\Application\brave.exe")) },
+    @{ id = "vivaldi";  paths = @((Join-Base $local "Vivaldi\Application\vivaldi.exe"), (Join-Base $pf "Vivaldi\Application\vivaldi.exe")) }
+)
+foreach ($c in $checks) {
+    foreach ($p in $c.paths) {
+        if ($p -and (Test-Path $p)) { $detected += $c.id; break }
+    }
+}
+$detected = @($detected | Select-Object -Unique)
+
+$selected = @()
+if ($NoBrowsers) {
+    $selected = @()
+} elseif ($AllBrowsers) {
+    $selected = $detected
+} elseif ($Browsers) {
+    $selected = @($Browsers -split '[,;\s]+' | Where-Object { $_ } | ForEach-Object { $_.ToLower() })
+} elseif ($detected.Count -eq 0) {
+    Write-Host "Браузеры не обнаружены — расширение можно установить позже вручную."
+} else {
+    Write-Host ""
+    Write-Host "Обнаружены браузеры:"
+    for ($i = 0; $i -lt $detected.Count; $i++) {
+        Write-Host ("  {0}) {1}" -f ($i + 1), $detected[$i])
+    }
+    $choice = Read-Host "Куда установить расширение? [1,2 / all / none] (Enter = Firefox, если есть)"
+    if ([string]::IsNullOrWhiteSpace($choice)) {
+        if ($detected -contains "firefox") { $selected = @("firefox") } else { $selected = $detected }
+    } elseif ($choice -eq "all") {
+        $selected = $detected
+    } elseif ($choice -eq "none") {
+        $selected = @()
+    } else {
+        foreach ($part in ($choice -split '[,;\s]+')) {
+            if ($part -match '^\d+$') {
+                $idx = [int]$part - 1
+                if ($idx -ge 0 -and $idx -lt $detected.Count) { $selected += $detected[$idx] }
+            } elseif ($part) {
+                $selected += $part.ToLower()
+            }
+        }
+    }
+}
+$selected = @($selected | Select-Object -Unique)
+
+# Reconcile: drop previous extension integration, then install only selected.
+$allExtRoots = @(
+    "HKCU:\Software\Google\Chrome\Extensions\$chromeId",
+    "HKCU:\Software\Google\Chrome Beta\Extensions\$chromeId",
+    "HKCU:\Software\Chromium\Extensions\$chromeId",
+    "HKCU:\Software\BraveSoftware\Brave-Browser\Extensions\$chromeId",
+    "HKCU:\Software\Microsoft\Edge\Extensions\$chromeId",
+    "HKCU:\Software\Vivaldi\Extensions\$chromeId"
+)
+foreach ($k in $allExtRoots) {
+    Remove-Item -Path $k -Recurse -Force -ErrorAction SilentlyContinue
+}
+$ffProfiles = Join-Path $env:APPDATA "Mozilla\Firefox\Profiles"
+if (Test-Path $ffProfiles) {
+    Get-ChildItem $ffProfiles -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-Item (Join-Path $_.FullName "extensions\xray-switch@oleg.dev.xpi") -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Autostart at logon (per-user, no admin).
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 New-Item -Path $runKey -Force | Out-Null
 Set-ItemProperty -Path $runKey -Name "XraySwitchHelper" -Value "`"$Exe`" ensure"
 
-# Firefox: signed XPI in every profile + the sideload pref.
-if (Test-Path $FirefoxXpi) {
-    $ffProfiles = Join-Path $env:APPDATA "Mozilla\Firefox\Profiles"
-    if (Test-Path $ffProfiles) {
-        Get-ChildItem $ffProfiles -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-            $extDir = Join-Path $_.FullName "extensions"
-            New-Item -ItemType Directory -Path $extDir -Force | Out-Null
-            Copy-Item $FirefoxXpi (Join-Path $extDir "xray-switch@oleg.dev.xpi") -Force
-            $userJs = Join-Path $_.FullName "user.js"
-            $pref = 'user_pref("extensions.autoDisableScopes", 0);'
-            if (-not (Test-Path $userJs)) {
-                Set-Content -Path $userJs -Value $pref -Encoding UTF8
-            } elseif (-not (Select-String -Path $userJs -SimpleMatch "extensions.autoDisableScopes" -Quiet)) {
-                Add-Content -Path $userJs -Value $pref -Encoding UTF8
+if ($selected -contains "firefox") {
+    if (Test-Path $FirefoxXpi) {
+        if (Test-Path $ffProfiles) {
+            Get-ChildItem $ffProfiles -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                $extDir = Join-Path $_.FullName "extensions"
+                New-Item -ItemType Directory -Path $extDir -Force | Out-Null
+                Copy-Item $FirefoxXpi (Join-Path $extDir "xray-switch@oleg.dev.xpi") -Force
+                $userJs = Join-Path $_.FullName "user.js"
+                $pref = 'user_pref("extensions.autoDisableScopes", 0);'
+                if (-not (Test-Path $userJs)) {
+                    Set-Content -Path $userJs -Value $pref -Encoding UTF8
+                } elseif (-not (Select-String -Path $userJs -SimpleMatch "extensions.autoDisableScopes" -Quiet)) {
+                    Add-Content -Path $userJs -Value $pref -Encoding UTF8
+                }
             }
         }
+        Copy-Item $FirefoxXpi (Join-Path $DataDir "exa-switch-firefox.xpi") -Force
+        Write-Host "Firefox: расширение установлено"
+    } else {
+        Write-Host "Firefox: XPI не найден, пропускаю"
     }
-    Copy-Item $FirefoxXpi (Join-Path $DataDir "exa-switch-firefox.xpi") -Force
 }
 
-# Chrome/Chromium/Edge/Brave/Vivaldi: external CRX via HKCU.
-if (Test-Path $ChromeCrx) {
-    $crxDest = Join-Path $DataDir "exa-switch.crx"
-    Copy-Item $ChromeCrx $crxDest -Force
-    $extRoots = @(
-        "HKCU:\Software\Google\Chrome\Extensions\$chromeId",
-        "HKCU:\Software\Google\Chrome Beta\Extensions\$chromeId",
-        "HKCU:\Software\Chromium\Extensions\$chromeId",
-        "HKCU:\Software\BraveSoftware\Brave-Browser\Extensions\$chromeId",
-        "HKCU:\Software\Microsoft\Edge\Extensions\$chromeId",
-        "HKCU:\Software\Vivaldi\Extensions\$chromeId"
-    )
-    foreach ($k in $extRoots) {
-        New-Item -Path $k -Force | Out-Null
-        Set-ItemProperty -Path $k -Name "path" -Value $crxDest
-        Set-ItemProperty -Path $k -Name "version" -Value $Version
+$selectedExtRoots = @()
+if ($selected -contains "chrome") {
+    $selectedExtRoots += "HKCU:\Software\Google\Chrome\Extensions\$chromeId"
+    $selectedExtRoots += "HKCU:\Software\Google\Chrome Beta\Extensions\$chromeId"
+}
+if ($selected -contains "chromium") { $selectedExtRoots += "HKCU:\Software\Chromium\Extensions\$chromeId" }
+if ($selected -contains "edge") { $selectedExtRoots += "HKCU:\Software\Microsoft\Edge\Extensions\$chromeId" }
+if ($selected -contains "brave") { $selectedExtRoots += "HKCU:\Software\BraveSoftware\Brave-Browser\Extensions\$chromeId" }
+if ($selected -contains "vivaldi") { $selectedExtRoots += "HKCU:\Software\Vivaldi\Extensions\$chromeId" }
+
+$selectedExtRoots = @($selectedExtRoots)
+if ($selectedExtRoots.Count -gt 0) {
+    if (Test-Path $ChromeCrx) {
+        $crxDest = Join-Path $DataDir "exa-switch.crx"
+        Copy-Item $ChromeCrx $crxDest -Force
+        foreach ($k in $selectedExtRoots) {
+            New-Item -Path $k -Force | Out-Null
+            Set-ItemProperty -Path $k -Name "path" -Value $crxDest
+            Set-ItemProperty -Path $k -Name "version" -Value $Version
+        }
+        Write-Host "Chrome/Chromium/Edge/Brave/Vivaldi: CRX установится при следующем запуске"
+    } else {
+        Write-Host "CRX не найден, пропускаю Chrome-семейство"
     }
 }
+
+Write-Host ""
+Write-Host "Выбранные браузеры: $($selected -join ', ')"
 
 Write-Host ""
 Write-Host "Starting helper..."
@@ -195,6 +293,14 @@ Write-Host "Starting helper..."
 
 Write-Host ""
 Write-Host "Next:"
-Write-Host "  Firefox: расширение уже установлено — перезапустите браузер"
-Write-Host "  Chrome/Edge/Brave: CRX установится при следующем запуске (может быть один запрос подтверждения)"
-Write-Host "  Если не появилось: chrome://extensions -> Developer mode -> Load unpacked -> $Root\dist\chrome"
+if ($selected -contains "firefox") {
+    Write-Host "  Firefox: перезапустите браузер — расширение уже установлено"
+}
+if ($selectedExtRoots.Count -gt 0) {
+    Write-Host "  Chrome/Chromium/Edge/Brave/Vivaldi: перезапустите браузер;"
+    Write-Host "  CRX установится автоматически (Chrome может показать один запрос подтверждения)"
+}
+if ($selected.Count -eq 0) {
+    Write-Host "  Расширение не установлено. Позже: .\install.ps1 -Browsers firefox,chrome"
+    Write-Host "  или chrome://extensions -> Developer mode -> Load unpacked -> $Root\dist\chrome"
+}

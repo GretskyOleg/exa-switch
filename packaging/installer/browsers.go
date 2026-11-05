@@ -16,6 +16,74 @@ func fileExists(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+var browserNames = map[string]string{
+	"firefox":  "Firefox",
+	"chrome":   "Google Chrome",
+	"chromium": "Chromium",
+	"edge":     "Microsoft Edge",
+	"brave":    "Brave",
+	"vivaldi":  "Vivaldi",
+}
+
+var browserAliases = map[string]string{
+	"firefox": "firefox", "ff": "firefox", "mozilla": "firefox",
+	"chrome": "chrome", "google-chrome": "chrome", "googlechrome": "chrome",
+	"chromium": "chromium",
+	"edge": "edge", "msedge": "edge", "microsoft-edge": "edge",
+	"brave": "brave", "brave-browser": "brave",
+	"vivaldi": "vivaldi",
+}
+
+func browserName(id string) string {
+	if name, ok := browserNames[id]; ok {
+		return name
+	}
+	return id
+}
+
+func dedupeBrowserIDs(ids []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = browserAliases[strings.ToLower(strings.TrimSpace(id))]
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
+}
+
+func parseBrowserSelection(value string, available []string) []string {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	if lower == "all" || lower == "*" {
+		return append([]string(nil), available...)
+	}
+	if lower == "none" || lower == "0" {
+		return nil
+	}
+	parts := strings.FieldsFunc(lower, func(r rune) bool {
+		return r == ',' || r == ' ' || r == ';'
+	})
+	return dedupeBrowserIDs(parts)
+}
+
+func hasChromeFamily(ids []string) bool {
+	for _, id := range ids {
+		if id != "firefox" {
+			return true
+		}
+	}
+	return false
+}
+
+
 // profileDirs returns Firefox profile directories under a Profiles/ root that
 // already contain profile data.
 func profileDirs(root string) []string {

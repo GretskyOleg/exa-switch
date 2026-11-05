@@ -16,6 +16,47 @@
 | Настройка Chrome | `%LOCALAPPDATA%\xray-switch\setup.html` |
 | Логи/токен | `%APPDATA%\xray-switch\` |
 
+## Выбор браузеров
+
+При обычном (интерактивном) запуске установщик сам находит браузеры и
+спрашивает, куда ставить расширение:
+
+```
+Обнаружены браузеры:
+  1) Firefox
+  2) Google Chrome
+  3) Microsoft Edge
+
+Куда установить расширение? [1,2 / all / none] (Enter = Firefox, если есть):
+```
+
+- `1,2` — номера браузеров;
+- `firefox,chrome` — имена;
+- `all` — все найденные;
+- `none` — не ставить расширение (только helper/native messaging);
+- **Enter** — Firefox, если он найден; иначе все найденные.
+
+Для silent-установки:
+
+```powershell
+.\EXA-Switch-Setup-windows-amd64.exe --silent --browsers=firefox
+.\EXA-Switch-Setup-windows-amd64.exe --silent --browsers=chrome,edge
+.\EXA-Switch-Setup-windows-amd64.exe --silent --all-browsers
+.\EXA-Switch-Setup-windows-amd64.exe --silent --no-browsers
+```
+
+`install.ps1` понимает то же самое:
+
+```powershell
+.\install.ps1 -Browsers firefox
+.\install.ps1 -Browsers chrome,edge
+.\install.ps1 -AllBrowsers
+.\install.ps1 -NoBrowsers
+```
+
+При переустановке выбор применяется заново: интеграция с браузерами, которые
+не выбраны, удаляется (CRX-ключи в реестре и XPI из профилей Firefox).
+
 ## Установка
 
 ### Вариант 1 — готовый `.exe`

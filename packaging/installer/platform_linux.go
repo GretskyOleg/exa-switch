@@ -141,13 +141,82 @@ func firefoxProfileRoots() []string {
 	}
 }
 
-func platformPostInstall(paths installPaths) error {
-	for _, root := range chromeConfigRoots() {
-		if isDir(root) {
-			_ = writeExternalExtension(root, paths.chromeCRX)
+func chromeConfigRootsFor(id string) []string {
+	base := xdgConfigHome()
+	switch id {
+	case "chrome":
+		return []string{filepath.Join(base, "google-chrome"), filepath.Join(base, "google-chrome-beta")}
+	case "chromium":
+		return []string{filepath.Join(base, "chromium")}
+	case "edge":
+		return []string{filepath.Join(base, "microsoft-edge")}
+	case "brave":
+		return []string{filepath.Join(base, "BraveSoftware", "Brave-Browser")}
+	case "vivaldi":
+		return []string{filepath.Join(base, "vivaldi")}
+	}
+	return nil
+}
+
+func platformDetectBrowsers() []string {
+	var out []string
+	has := func(bin string) bool {
+		_, err := exec.LookPath(bin)
+		return err == nil
+	}
+	if has("firefox") || isDir(filepath.Join(xdgConfigHome(), "mozilla", "firefox")) ||
+		isDir(filepath.Join(homeDir(), ".mozilla", "firefox")) {
+		out = append(out, "firefox")
+	}
+	checks := []struct {
+		id   string
+		bins []string
+	}{
+		{"chrome", []string{"google-chrome", "google-chrome-stable"}},
+		{"chromium", []string{"chromium", "chromium-browser"}},
+		{"edge", []string{"microsoft-edge", "microsoft-edge-stable"}},
+		{"brave", []string{"brave", "brave-browser"}},
+		{"vivaldi", []string{"vivaldi", "vivaldi-stable"}},
+	}
+	for _, check := range checks {
+		found := false
+		for _, bin := range check.bins {
+			if has(bin) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			for _, root := range chromeConfigRootsFor(check.id) {
+				if isDir(root) {
+					found = true
+					break
+				}
+			}
+		}
+		if found {
+			out = append(out, check.id)
 		}
 	}
-	installFirefoxProfiles(firefoxProfileRoots(), paths.firefoxXPI)
+	return out
+}
+
+func platformPostInstall(paths installPaths, browsers []string) error {
+	platformRemoveBrowserExtensions()
+	for _, id := range browsers {
+		if id == "firefox" {
+			installFirefoxProfiles(firefoxProfileRoots(), paths.firefoxXPI)
+			continue
+		}
+		if paths.chromeCRX == "" {
+			continue
+		}
+		for _, root := range chromeConfigRootsFor(id) {
+			if isDir(root) {
+				_ = writeExternalExtension(root, paths.chromeCRX)
+			}
+		}
+	}
 
 	autostart := filepath.Join(xdgConfigHome(), "autostart", "xray-switch-helper.desktop")
 	content := "[Desktop Entry]\n" +
@@ -161,11 +230,15 @@ func platformPostInstall(paths installPaths) error {
 	return writeFile(autostart, []byte(content), 0o644)
 }
 
-func platformRemoveIntegration() {
+func platformRemoveBrowserExtensions() {
 	for _, root := range chromeConfigRoots() {
 		removeExternalExtension(root)
 	}
 	removeFirefoxProfiles(firefoxProfileRoots())
+}
+
+func platformRemoveIntegration() {
+	platformRemoveBrowserExtensions()
 	_ = os.Remove(filepath.Join(xdgConfigHome(), "autostart", "xray-switch-helper.desktop"))
 }
 

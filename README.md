@@ -91,6 +91,11 @@ extension и ставятся при следующем запуске брау�
 - **Chrome / Chromium / Edge / Brave:** automatic CRX / `chrome://extensions` → Developer mode → Load unpacked → папка из setup-страницы.
 - **Firefox:** automatic signed XPI; для разработки также `about:debugging#/runtime/this-firefox` → Load Temporary Add-on.
 
+Windows-установщик **спрашивает, в какие браузеры ставить расширение**
+(Firefox по Enter; `1,2` / `all` / `none`). Для silent-установки:
+`--browsers=firefox`, `--browsers=chrome,edge`, `--all-browsers`, `--no-browsers`.
+Подробнее — [docs/INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md).
+
 Браузерные архивы отдельно:
 
 ```

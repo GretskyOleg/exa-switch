@@ -28,6 +28,17 @@
 Подробно, с картинками действий и разбором ошибок — в
 [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
+## Скриншоты
+
+<p align="center">
+  <img src="docs/images/options-import.png" alt="Настройки EXA Switch" width="720">
+  <img src="docs/images/popup-site.png" alt="Popup EXA Switch" width="250">
+</p>
+
+<p align="center">
+  <img src="docs/images/installer-browser-picker.png" alt="Выбор браузера в установщике" width="640">
+</p>
+
 ---
 
 ## Что умеет

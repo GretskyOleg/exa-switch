@@ -434,6 +434,13 @@ WantedBy=default.target
         for doc in sorted(docs_src.glob("*.md")):
             write_file(stage / "usr" / "share" / "doc" / "exa-switch" / doc.name,
                        doc.read_text(encoding="utf-8"))
+        images_src = docs_src / "images"
+        if images_src.is_dir():
+            shutil.copytree(
+                images_src,
+                stage / "usr" / "share" / "doc" / "exa-switch" / "images",
+                dirs_exist_ok=True,
+            )
 
     return stage
 

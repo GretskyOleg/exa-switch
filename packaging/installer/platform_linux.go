@@ -205,7 +205,9 @@ func platformPostInstall(paths installPaths, browsers []string) error {
 	platformRemoveBrowserExtensions()
 	for _, id := range browsers {
 		if id == "firefox" {
-			installFirefoxProfiles(firefoxProfileRoots(), paths.firefoxXPI)
+			if installFirefoxProfiles(firefoxProfileRoots(), paths.firefoxXPI) == 0 {
+				fmt.Println("  ! Firefox: профиль не найден. Запустите Firefox один раз и повторите установку.")
+			}
 			continue
 		}
 		if paths.chromeCRX == "" {

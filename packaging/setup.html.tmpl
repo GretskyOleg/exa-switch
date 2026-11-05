@@ -157,7 +157,8 @@
     <div class="ico">!</div>
     <div>
       <b>Осталось одно действие в браузере.</b> Chrome и Firefox не разрешают установщику молча добавить расширение.
-      Всё остальное уже установлено: helper, native messaging и папки расширения. Ниже — точные пути и шаги.
+      Всё остальное уже установлено: helper, native messaging, автозапуск и расширения.
+      Если расширение уже появилось в браузере — установка завершена. Ниже — ручной fallback и точные пути.
     </div>
   </div>
 
@@ -165,23 +166,23 @@
 
     <section class="card">
       <div class="card-head">
-        <h2>Chrome / Chromium</h2>
-        <span class="browser">Load unpacked</span>
+        <h2>Chrome / Chromium / Edge / Brave</h2>
+        <span class="browser">CRX / auto</span>
       </div>
-      <p class="sub">Edge и Brave работают так же — это Chromium-браузеры.</p>
+      <p class="sub">Обычно расширение ставится автоматически при следующем запуске браузера (подписанный CRX + external extension). Chrome может показать один запрос подтверждения.</p>
 
       <div class="step">
         <div class="num">1</div>
         <div>
-          <b>Открой страницу расширений</b>
-          <p>Введи в адресной строке <span class="key">chrome://extensions</span> и включи <b>Developer mode</b> (режим разработчика).</p>
+          <b>Проверь chrome://extensions</b>
+          <p>Если <b>EXA Switch</b> уже в списке — всё готово. Если нет — перезапусти браузер.</p>
         </div>
       </div>
       <div class="step">
         <div class="num">2</div>
         <div>
-          <b>Нажми «Load unpacked»</b>
-          <p>Выбери папку:</p>
+          <b>Ручной fallback: Load unpacked</b>
+          <p>Включи <b>Developer mode</b> и выбери папку:</p>
           <div class="pathline">
             <code class="path" id="chromePath">{{CHROME_DIR}}</code>
             <button class="copy" data-copy-target="chromePath">Копировать</button>
@@ -192,7 +193,7 @@
         <div class="num">3</div>
         <div>
           <b>Готово</b>
-          <p>Расширение останется в браузере после перезапуска. В нём уже прописан ID <span class="key">{{CHROME_ID}}</span>.</p>
+          <p>Расширение останется в браузере после перезапуска. ID: <span class="key">{{CHROME_ID}}</span>.</p>
         </div>
       </div>
       <p class="hint">Если Chrome запущен с отдельным <span class="key">--user-data-dir</span>, native messaging ищется внутри этого профиля. Обычная установка этого не требует.</p>
@@ -201,22 +202,22 @@
     <section class="card">
       <div class="card-head">
         <h2>Firefox</h2>
-        <span class="browser">Temporary / XPI</span>
+        <span class="browser">Signed XPI</span>
       </div>
-      <p class="sub">Для временного добавления без подписи.</p>
+      <p class="sub">Обычно подписанный XPI уже установлен в профиль. Проверь <span class="key">about:addons</span> → Расширения.</p>
 
       <div class="step">
         <div class="num">1</div>
         <div>
-          <b>Открой отладку дополнений</b>
-          <p>Введи <span class="key">about:debugging#/runtime/this-firefox</span>.</p>
+          <b>Проверь about:addons</b>
+          <p>Если <b>EXA Switch</b> уже в списке — перезапусти Firefox, если ещё не сделал этого.</p>
         </div>
       </div>
       <div class="step">
         <div class="num">2</div>
         <div>
-          <b>Load Temporary Add-on</b>
-          <p>Выбери файл <span class="key">manifest.json</span> в папке:</p>
+          <b>Fallback для разработки: Load Temporary Add-on</b>
+          <p>Введи <span class="key">about:debugging#/runtime/this-firefox</span> и выбери <span class="key">manifest.json</span> из папки:</p>
           <div class="pathline">
             <code class="path" id="firefoxPath">{{FIREFOX_DIR}}</code>
             <button class="copy" data-copy-target="firefoxPath">Копировать</button>
@@ -227,10 +228,9 @@
         <div class="num">3</div>
         <div>
           <b>Помни про ограничение</b>
-          <p>Temporary Add-on исчезает после перезапуска Firefox. Для постоянной установки нужен подписанный XPI (AMO) или Developer Edition/Nightly.</p>
+          <p>Temporary Add-on исчезает после перезапуска. Постоянная установка делается подписанным XPI автоматически.</p>
         </div>
       </div>
-      <p class="hint">В комплекте есть <span class="key">xray-switch-firefox.xpi</span> — его можно подписать через AMO и поставить навсегда.</p>
     </section>
 
     <section class="card wide">

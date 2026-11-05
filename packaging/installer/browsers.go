@@ -182,12 +182,16 @@ func removeExternalExtension(configRoot string) {
 	_ = os.Remove(filepath.Join(configRoot, "External Extensions", chromeID+".json"))
 }
 
-func installFirefoxProfiles(roots []string, xpi string) {
+func installFirefoxProfiles(roots []string, xpi string) int {
+	count := 0
 	for _, root := range roots {
 		for _, profile := range profileDirs(root) {
-			_ = installFirefoxXPI(profile, xpi)
+			if err := installFirefoxXPI(profile, xpi); err == nil {
+				count++
+			}
 		}
 	}
+	return count
 }
 
 func removeFirefoxProfiles(roots []string) {

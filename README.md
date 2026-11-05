@@ -35,7 +35,7 @@ VLESS/Reality, тёмный фирменный интерфейс, подпис�
 маршрутизация Xray, per-app split tunneling и плитка в шторке.
 
 - Репозиторий: [GretskyOleg/exa-android](https://github.com/GretskyOleg/exa-android)
-- APK: [android-v0.1.0](https://github.com/GretskyOleg/exa-android/releases/tag/android-v0.1.0)
+- APK: [android-v0.1.1](https://github.com/GretskyOleg/exa-android/releases/tag/android-v0.1.1)
 - Внутри: Compose + `VpnService` + xray-core (`libv2ray`) + `hev-socks5-tunnel`.
 
 Исходники Android переехали в отдельный репозиторий; здесь остаются расширение,

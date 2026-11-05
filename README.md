@@ -28,6 +28,15 @@
 Подробно, с картинками действий и разбором ошибок — в
 [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
+## EXA для Android
+
+Нативный VPN-клиент **EXA** для Android 10+: весь системный трафик через
+VLESS/Reality, тёмный фирменный интерфейс, профили, подписки, автоподключение.
+
+- Исходники и сборка: [`android/`](android/README.md)
+- APK: в релизах GitHub (`android-v0.1.0`)
+- Внутри: Compose + `VpnService` + xray-core (`libv2ray`) + `hev-socks5-tunnel`.
+
 ## Скриншоты
 
 <p align="center">

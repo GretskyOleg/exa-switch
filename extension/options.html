@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EXA Switch — настройки</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div class="hero-content">
+        <div class="eyebrow">EXA <span>//</span> SECURE TUNNEL <span>//</span> VLESS CONTROL</div>
+        <div class="hero-brand">
+          <img class="hero-logo" src="branding/logo.png" alt="EXA">
+          <div class="hero-title">
+            <h1>EXA <span>Switch</span></h1>
+            <p>VLESS / Reality / XHTTP через локальный xray-core.<br>Проксируй только то, что нужно.</p>
+          </div>
+        </div>
+        <div class="hero-status">
+          <span class="dot" id="statusDot"></span>
+          <div>
+            <div id="statusText">Проверка…</div>
+            <small id="version">v0.1.0</small>
+          </div>
+        </div>
+      </div>
+      <div class="hero-portrait">
+        <img src="branding/persona.jpg" alt="">
+        <div class="hero-portrait-label">EXA <span>//</span> 001</div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav class="side">
+        <button class="nav-item active" data-tab="profiles">
+          <span class="nav-ico">◈</span><span>Профили</span>
+        </button>
+        <button class="nav-item" data-tab="rules">
+          <span class="nav-ico">⌁</span><span>Правила сайтов</span>
+        </button>
+        <button class="nav-item" data-tab="helper">
+          <span class="nav-ico">⚙</span><span>Helper и логи</span>
+        </button>
+        <button class="nav-item" data-tab="about">
+          <span class="nav-ico">ⓘ</span><span>О программе</span>
+        </button>
+        <div class="side-note">
+          <b>Как это работает</b>
+          <span>Расширение управляет браузером, xray-core живёт в локальном helper'е.</span>
+        </div>
+      </nav>
+
+      <main class="content">
+        <!-- ПРОФИЛИ -->
+        <section class="panel active" data-panel="profiles">
+          <div class="panel-head">
+            <div>
+              <h2>VLESS-профили</h2>
+              <p>Вставьте одну или несколько ссылок <code>vless://</code>, base64-подписку или URL подписки.</p>
+            </div>
+            <span class="counter" id="profileCount">0</span>
+          </div>
+
+          <div class="card add-card">
+            <label for="importText">Добавить конфигурацию</label>
+            <textarea id="importText" spellcheck="false" placeholder="vless://uuid@server:443?security=reality&sni=example.com&fp=chrome&pbk=...&sid=...&type=tcp&flow=xtls-rprx-vision#Мой сервер
+
+или https://example.com/subscription.txt"></textarea>
+            <div class="form-foot">
+              <span class="hint">Поддерживаются VLESS, несколько ссылок сразу и подписки (base64).</span>
+              <button class="btn primary" id="importBtn">Импортировать</button>
+            </div>
+            <div class="import-result hidden" id="importResult"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>Сохранённые профили</h3>
+              <span class="muted">Активный профиль используется туннелем</span>
+            </div>
+            <div class="profiles" id="profilesList"></div>
+          </div>
+        </section>
+
+        <!-- ПРАВИЛА -->
+        <section class="panel" data-panel="rules">
+          <div class="panel-head">
+            <div>
+              <h2>Правила сайтов</h2>
+              <p>Режим «Авто» проксирует только сайты с правилом <b>proxy</b>. Режим «Всё» проксирует всё, кроме <b>direct</b>.</p>
+            </div>
+            <span class="counter" id="rulesCount">0</span>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>Режим по умолчанию</h3>
+              <span class="muted">дублирует переключатель в popup</span>
+            </div>
+            <div class="seg" id="rulesMode">
+              <button data-mode="off">Выкл</button>
+              <button data-mode="auto">Авто — только правила</button>
+              <button data-mode="global">Всё через прокси</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <label for="rulePattern">Добавить сайт</label>
+            <div class="inline-form">
+              <input id="rulePattern" type="text" spellcheck="false" placeholder="example.com, *.example.com, *google*">
+              <select id="ruleAction">
+                <option value="proxy">Проксировать</option>
+                <option value="direct">Напрямую</option>
+              </select>
+              <button class="btn primary" id="addRuleBtn">Добавить</button>
+            </div>
+            <div class="hint" style="margin-top:8px">
+              <code>example.com</code> — сам домен и поддомены · <code>*.example.com</code> — только поддомены · <code>*</code> — все сайты.
+              Более специфичное правило побеждает. При равенстве — «напрямую».
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>Список правил</h3>
+              <button class="btn ghost small" id="clearRulesBtn">Очистить</button>
+            </div>
+            <div class="rules" id="rulesList"></div>
+          </div>
+        </section>
+
+        <!-- HELPER -->
+        <section class="panel" data-panel="helper">
+          <div class="panel-head">
+            <div>
+              <h2>Helper и логи</h2>
+              <p>Локальный демон на <code>127.0.0.1</code> держит xray-core и отдаёт SOCKS/HTTP прокси только этому браузеру.</p>
+            </div>
+            <span class="pill" id="helperPill">—</span>
+          </div>
+
+          <div class="card">
+            <div class="status-grid">
+              <div><span>Helper</span><b id="helperState">—</b></div>
+              <div><span>Ядро</span><b id="coreState">—</b></div>
+              <div><span>Профиль</span><b id="profileState">—</b></div>
+              <div><span>SOCKS</span><b id="socksState">—</b></div>
+              <div><span>HTTP</span><b id="httpState">—</b></div>
+              <div><span>Версия</span><b id="versionState">—</b></div>
+              <div><span>PID</span><b id="pidState">—</b></div>
+              <div><span>Uptime</span><b id="uptimeState">—</b></div>
+            </div>
+            <div class="error-box hidden" id="helperError"></div>
+            <div class="btn-row">
+              <button class="btn primary" id="restartHelperBtn">Перезапустить helper</button>
+              <button class="btn ghost" id="stopCoreBtn">Остановить ядро</button>
+              <button class="btn ghost" id="refreshHelperBtn">Обновить</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>Проверка туннеля</h3>
+              <span class="muted">запрос через SOCKS до указанного URL</span>
+            </div>
+            <div class="inline-form">
+              <input id="healthTarget" type="text" spellcheck="false" placeholder="https://www.gstatic.com/generate_204">
+              <button class="btn primary" id="healthBtn">Проверить</button>
+            </div>
+            <div class="health-result hidden" id="healthResult"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>Логи ядра</h3>
+              <div class="btn-row compact">
+                <button class="btn ghost small" id="refreshLogsBtn">Обновить</button>
+                <button class="btn ghost small" id="copyLogsBtn">Копировать</button>
+              </div>
+            </div>
+            <pre class="logs" id="logsPre">Логи появятся после запуска ядра.</pre>
+          </div>
+
+          <div class="card install-card" id="installCard">
+            <div class="card-head">
+              <h3>Установка helper'а</h3>
+              <span class="muted">один раз на машину</span>
+            </div>
+            <p>Если helper не найден, выполните в папке проекта:</p>
+            <div class="copy-line">
+              <code id="installCmd">./install.sh</code>
+              <button class="btn ghost small" id="copyInstallBtn">Копировать</button>
+            </div>
+            <ol class="steps">
+              <li>Запустите <code>./install.sh</code> — он соберёт helper и пропишет native messaging для Chrome/Firefox.</li>
+              <li>Перезапустите браузер (Chrome не подхватывает новый native host на лету).</li>
+              <li>Вернитесь на эту страницу и нажмите «Перезапустить helper».</li>
+            </ol>
+            <p class="muted">Native host: <code id="nativeName">com.oleg.xray_switch</code></p>
+          </div>
+        </section>
+
+        <!-- О ПРОГРАММЕ -->
+        <section class="panel" data-panel="about">
+          <div class="panel-head">
+            <div>
+              <h2>О программе</h2>
+              <p>Расширение — это UI и правила. Туннель держит xray-core в helper'е, поэтому браузер получает настоящий SOCKS5.</p>
+            </div>
+          </div>
+
+          <div class="card prose">
+            <h3>Архитектура</h3>
+            <p><b>Расширение</b> хранит профили и правила, генерирует PAC для Chrome (или <code>proxy.onRequest</code> для Firefox) и показывает статус.</p>
+            <p><b>Helper</b> — отдельный локальный процесс с xray-core. Он слушает только <code>127.0.0.1</code>, отдаёт SOCKS5 и HTTP, а доступ защищён случайным токеном.</p>
+            <p><b>Native messaging</b> нужен только для автозапуска helper'а и передачи токена. После старта helper живёт отдельно и переживает перезапуск браузера.</p>
+
+            <h3>Что проксируется</h3>
+            <p>HTTP/HTTPS, WebSocket и обычные запросы браузера. WebRTC/UDP и трафик других приложений — нет: это ограничение браузерного прокси, а не xray.</p>
+
+            <h3>Приватность</h3>
+            <p>VLESS-ссылки и UUID хранятся в <code>chrome.storage.local</code> и никуда не отправляются. Подписка скачивается только по вашему действию. Экспорт настроек содержит секреты — не публикуйте его.</p>
+
+            <h3>Ограничения</h3>
+            <ul>
+              <li>Нужен установленный helper; без него расширение не создаст туннель.</li>
+              <li>Chrome использует PAC, поэтому при смене правил новые соединения применяются сразу, старые — после перезагрузки страницы.</li>
+              <li>Flatpak/Snap версии браузеров могут не видеть native host — ставьте браузер из репозитория или используйте Chrome/Chromium.</li>
+            </ul>
+
+            <h3>Настройки</h3>
+            <div class="btn-row">
+              <button class="btn primary" id="exportAllBtn">Экспорт настроек</button>
+              <label class="btn ghost file-btn">Импорт
+                <input type="file" id="importAllFile" accept="application/json,.json">
+              </label>
+              <button class="btn ghost" id="clearCacheBtn">Сбросить кэш helper'а</button>
+            </div>
+            <p class="muted">Экспорт включает VLESS-профили и UUID. Импорт заменит текущие профили и правила.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="lib/util.js"></script>
+  <script src="lib/rules.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

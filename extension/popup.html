@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EXA Switch</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <div class="brand-mark"><img src="branding/logo.png" alt="EXA" width="48" height="33"></div>
+        <div class="brand-text">
+          <h1>EXA <span>Switch</span></h1>
+          <span class="ver" id="version">VLESS CONTROL // v0.1.0</span>
+        </div>
+      </div>
+      <button class="icon-btn" id="openOptions" title="Настройки" aria-label="Настройки">
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 8.9 4.6 1.7 1.7 0 0 0 9.93 3.04V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.12.4.4.75.78.97.3.17.64.26.98.26H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+      </button>
+    </header>
+
+    <section class="card status-card" id="statusCard">
+      <div class="status-main">
+        <span class="dot" id="statusDot"></span>
+        <div class="status-text">
+          <div class="status-title" id="statusTitle">Проверка…</div>
+          <div class="sub" id="statusSub">соединяемся с helper'ом</div>
+        </div>
+      </div>
+      <button class="power" id="power">Вкл</button>
+    </section>
+
+    <div class="banner hidden" id="banner">
+      <div id="bannerText"></div>
+      <button id="bannerBtn">Исправить</button>
+    </div>
+
+    <section class="card">
+      <div class="row">
+        <div class="label">Режим</div>
+        <div class="hint" id="modeHint"></div>
+      </div>
+      <div class="seg" id="modeSeg">
+        <button data-mode="off">Выкл</button>
+        <button data-mode="auto">Авто</button>
+        <button data-mode="global">Всё</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div class="label">Профиль</div>
+        <button class="link" id="addProfile">Добавить</button>
+      </div>
+      <select id="profileSelect" aria-label="VLESS профиль"></select>
+      <div class="profile-meta" id="profileMeta"></div>
+      <div class="row2">
+        <button class="primary" id="connectBtn">Подключить</button>
+        <button class="ghost" id="healthBtn">Проверить</button>
+      </div>
+    </section>
+
+    <section class="card" id="siteCard">
+      <div class="row">
+        <div class="label">Этот сайт</div>
+        <span class="pill" id="siteVerdict">—</span>
+      </div>
+      <div class="host" id="siteHost">—</div>
+      <div class="site-actions">
+        <button data-site="proxy">Прокси</button>
+        <button data-site="direct">Напрямую</button>
+        <button data-site="reset">Сброс</button>
+      </div>
+      <div class="hint site-rule" id="siteRule"></div>
+    </section>
+
+    <footer class="foot">
+      <span id="helperLine">helper: —</span>
+      <span class="foot-sep">·</span>
+      <a href="#" id="openOptions2">все настройки</a>
+    </footer>
+    <div class="brand-foot">EXA <span>//</span> EBANEX <span>//</span> SECURE TUNNEL</div>
+
+    <div class="toast hidden" id="toast"></div>
+  </div>
+
+  <script src="lib/util.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

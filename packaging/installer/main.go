@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	appVersion     = "0.1.1"
+	appVersion     = "0.1.2"
 	chromeID       = "bdbbepgnedpgfieoimcbbbigkkkcfhpl"
 	firefoxID      = "xray-switch@oleg.dev"
 	nativeHostName = "com.oleg.xray_switch"

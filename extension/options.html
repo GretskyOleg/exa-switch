@@ -64,12 +64,25 @@
           </div>
 
           <div class="card add-card">
+            <div class="card-head" id="welcomeCard">
+              <div>
+                <h3>Быстрый старт</h3>
+                <p class="hint" style="margin:4px 0 0">
+                  1. Вставьте <code>vless://</code> или URL подписки ниже ·
+                  2. Нажмите «Импортировать» — туннель проверится автоматически ·
+                  3. Включите «Авто» и добавьте сайты в «Правилах».
+                </p>
+              </div>
+            </div>
             <label for="importText">Добавить конфигурацию</label>
             <textarea id="importText" spellcheck="false" placeholder="vless://uuid@server:443?security=reality&sni=example.com&fp=chrome&pbk=...&sid=...&type=tcp&flow=xtls-rprx-vision#Мой сервер
 
 или https://example.com/subscription.txt"></textarea>
             <div class="form-foot">
-              <span class="hint">Поддерживаются VLESS, несколько ссылок сразу и подписки (base64).</span>
+              <label class="check">
+                <input type="checkbox" id="autoCheck" checked>
+                Проверить туннель после импорта
+              </label>
               <button class="btn primary" id="importBtn">Импортировать</button>
             </div>
             <div class="import-result hidden" id="importResult"></div>
@@ -78,9 +91,24 @@
           <div class="card">
             <div class="card-head">
               <h3>Сохранённые профили</h3>
-              <span class="muted">Активный профиль используется туннелем</span>
+              <div class="btn-row compact">
+                <span class="muted">Активный профиль используется туннелем</span>
+                <button class="btn ghost small" id="testProfilesBtn">Проверить все</button>
+              </div>
             </div>
             <div class="profiles" id="profilesList"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>Подписки</h3>
+              <span class="muted" id="subsCount">0</span>
+            </div>
+            <p class="hint" style="margin-top:0">
+              Подписка обновляется автоматически по расписанию. При обновлении профили
+              этой подписки заменяются новыми; профили из других источников не трогаются.
+            </p>
+            <div class="subs" id="subsList"></div>
           </div>
         </section>
 
@@ -178,6 +206,7 @@
               <div class="btn-row compact">
                 <button class="btn ghost small" id="refreshLogsBtn">Обновить</button>
                 <button class="btn ghost small" id="copyLogsBtn">Копировать</button>
+                <button class="btn ghost small" id="downloadDiagBtn">Диагностика</button>
               </div>
             </div>
             <pre class="logs" id="logsPre">Логи появятся после запуска ядра.</pre>

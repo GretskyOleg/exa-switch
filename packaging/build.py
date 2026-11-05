@@ -202,6 +202,82 @@ def write_file(path: Path, text: str, mode: int = 0o644):
     path.chmod(mode)
 
 
+def firefox_policy_install_sh() -> str:
+    return f"""POLICY=/etc/firefox/policies/policies.json
+SRC=/usr/share/xray-switch/firefox-policies.json
+if [ -f "$SRC" ]; then
+  mkdir -p /etc/firefox/policies
+  if [ ! -f "$POLICY" ]; then
+    cp "$SRC" "$POLICY"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$POLICY" <<'PY'
+import json, sys
+p = sys.argv[1]
+try:
+    data = json.load(open(p, encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+pol = data.setdefault("policies", {{}})
+ext = pol.setdefault("Extensions", {{}})
+inst = ext.get("Install")
+if not isinstance(inst, list):
+    inst = []
+prefix = "file:///usr/share/xray-switch/exa-switch"
+inst = [u for u in inst if not (isinstance(u, str) and u.startswith(prefix) and u.endswith(".xpi"))]
+inst.append("file:///usr/share/xray-switch/exa-switch-{version()}.xpi")
+ext["Install"] = inst
+locked = ext.get("Locked")
+if not isinstance(locked, list):
+    locked = []
+if "xray-switch@oleg.dev" not in locked:
+    locked.append("xray-switch@oleg.dev")
+ext["Locked"] = locked
+open(p, "w", encoding="utf-8").write(json.dumps(data, indent=2, ensure_ascii=False) + "\\n")
+PY
+  fi
+fi
+"""
+
+
+def firefox_policy_remove_sh() -> str:
+    return """POLICY=/etc/firefox/policies/policies.json
+if [ -f "$POLICY" ] && command -v python3 >/dev/null 2>&1; then
+  python3 - "$POLICY" <<'PY'
+import json, os, sys
+p = sys.argv[1]
+try:
+    data = json.load(open(p, encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+pol = data.get("policies", {})
+ext = pol.get("Extensions")
+if isinstance(ext, dict):
+    prefix = "file:///usr/share/xray-switch/exa-switch"
+    inst = ext.get("Install")
+    if isinstance(inst, list):
+        inst = [u for u in inst if not (isinstance(u, str) and u.startswith(prefix) and u.endswith(".xpi"))]
+        if inst:
+            ext["Install"] = inst
+        else:
+            ext.pop("Install", None)
+    locked = ext.get("Locked")
+    if isinstance(locked, list):
+        locked = [x for x in locked if x != "xray-switch@oleg.dev"]
+        if locked:
+            ext["Locked"] = locked
+        else:
+            ext.pop("Locked", None)
+    if not ext:
+        pol.pop("Extensions", None)
+if not pol:
+    os.unlink(p)
+else:
+    open(p, "w", encoding="utf-8").write(json.dumps(data, indent=2, ensure_ascii=False) + "\\n")
+PY
+fi
+"""
+
+
 def stage_linux_package(target_os: str, arch: str) -> Path:
     stage = BUILD / f"stage-linux-{arch}"
     shutil.rmtree(stage, ignore_errors=True)
@@ -237,6 +313,11 @@ else
 fi
 """
     write_file(stage / "usr" / "bin" / "xray-switch-setup", setup_script, 0o755)
+    browsers_script = ROOT / "scripts" / "xray-switch-browsers"
+    if browsers_script.is_file():
+        browsers_dst = stage / "usr" / "bin" / "xray-switch-browsers"
+        shutil.copy2(browsers_script, browsers_dst)
+        browsers_dst.chmod(0o755)
     helper_link = stage / "usr" / "bin" / "xray-switch-helper"
     if helper_link.is_symlink() or helper_link.exists():
         helper_link.unlink()
@@ -403,6 +484,7 @@ Priority: optional
 Architecture: {deb_arch}
 Maintainer: EXA Switch <exa@example.invalid>
 Installed-Size: {max(1, total // 1024)}
+Depends: python3
 Recommends: ca-certificates, xdg-utils
 Description: EXA Switch - per-site VLESS proxy
  Browser extension and local xray-core helper. Proxies only the sites
@@ -410,16 +492,22 @@ Description: EXA Switch - per-site VLESS proxy
 """
     (work / "debian-binary").write_text("2.0\n", encoding="ascii")
     (work / "control").write_text(control, encoding="utf-8")
-    (work / "postinst").write_text(
+    postinst = (
         "#!/bin/sh\nset -e\n"
-        "echo \"EXA Switch installed. Run 'xray-switch-setup' to finish browser setup.\"\n",
-        encoding="utf-8",
+        + firefox_policy_install_sh()
+        + "echo \"EXA Switch installed.\"\n"
+        + "echo \"Firefox: extension installed via policy; restart Firefox.\"\n"
+        + "echo \"Chrome-family: run 'xray-switch-browsers install all' (or a list).\"\n"
     )
+    (work / "postinst").write_text(postinst, encoding="utf-8")
     (work / "postinst").chmod(0o755)
+    postrm = "#!/bin/sh\nset -e\n" + firefox_policy_remove_sh()
+    (work / "postrm").write_text(postrm, encoding="utf-8")
+    (work / "postrm").chmod(0o755)
     (work / "md5sums").write_text("\n".join(md5_lines) + "\n", encoding="utf-8")
 
     with tarfile.open(work / "control.tar.gz", "w:gz", format=tarfile.PAX_FORMAT) as tf:
-        for name in ("control", "postinst", "md5sums"):
+        for name in ("control", "postinst", "postrm", "md5sums"):
             info = tf.gettarinfo(str(work / name), arcname="./" + name)
             info.uid = info.gid = 0
             info.uname = info.gname = "root"
@@ -493,6 +581,7 @@ License:        MIT
 URL:            https://github.com/
 Requires:       ca-certificates
 Requires:       xdg-utils
+Requires:       python3
 
 %description
 EXA Switch is a browser extension plus a local xray-core helper.
@@ -508,7 +597,13 @@ cp -a "{stage}/." %{{buildroot}}/
 {chr(10).join(files)}
 
 %post
-echo "EXA Switch installed. Run 'xray-switch-setup' to finish browser setup."
+{firefox_policy_install_sh()}
+echo "EXA Switch installed."
+echo "Firefox: extension installed via policy; restart Firefox."
+echo "Chrome-family: run 'xray-switch-browsers install all' (or a list)."
+
+%postun
+{firefox_policy_remove_sh()}
 """
     spec_path = top / "SPECS" / "exa-switch.spec"
     spec_path.write_text(spec, encoding="utf-8")

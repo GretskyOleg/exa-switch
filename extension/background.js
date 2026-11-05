@@ -22,6 +22,7 @@
     profiles: [],
     activeProfileId: null,
     rules: [],
+    subscriptions: [],
     proxyPort: 0,
     httpPort: 0,
     helperInfo: null
@@ -82,6 +83,14 @@
     return parsed.outbound;
   }
 
+  function redactSensitive(value) {
+    return String(value == null ? "" : value)
+      .replace(/vless:\/\/[^\s]+/gi, "vless://<redacted>")
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<uuid>")
+      .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer <redacted>")
+      .replace(/(token["']?\s*[:=]\s*["']?)[A-Za-z0-9._-]+/gi, "$1<redacted>");
+  }
+
   function normalizeRules(rules) {
     var map = {};
     var list = Array.isArray(rules) ? rules : [];
@@ -99,12 +108,40 @@
     return Object.keys(map).map(function (k) { return map[k]; });
   }
 
+  function normalizeSubscriptions(subs) {
+    var list = Array.isArray(subs) ? subs : [];
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < list.length && out.length < 50; i++) {
+      var sub = list[i] || {};
+      var url = String(sub.url || "").trim();
+      if (!/^https?:\/\/[^\s]+$/i.test(url) || url.length > 4096) continue;
+      if (seen[url]) continue;
+      seen[url] = true;
+      var interval = parseInt(sub.intervalMin, 10);
+      if (!isFinite(interval) || interval < 30) interval = 360;
+      if (interval > 10080) interval = 10080;
+      out.push({
+        id: typeof sub.id === "string" && /^[A-Za-z0-9._-]{1,80}$/.test(sub.id) ? sub.id : XS.uid(),
+        url: url,
+        name: String(sub.name || "").trim().slice(0, 80) || XS.hostFromUrl(url) || "subscription",
+        intervalMin: interval,
+        lastFetched: Number(sub.lastFetched) || 0,
+        lastError: String(sub.lastError || "").slice(0, 300),
+        addedAt: Number(sub.addedAt) || Date.now(),
+        profileCount: Math.max(0, parseInt(sub.profileCount, 10) || 0)
+      });
+    }
+    return out;
+  }
+
   function getSettings() {
     return XS.storageGet(DEFAULTS).then(function (s) {
       if (["off", "auto", "global"].indexOf(s.mode) === -1) s.mode = "auto";
       if (["off", "auto", "global"].indexOf(s.lastMode) === -1) s.lastMode = "auto";
       s.profiles = (Array.isArray(s.profiles) ? s.profiles : []).filter(isProfile).slice(0, 500);
       s.rules = normalizeRules(s.rules);
+      s.subscriptions = normalizeSubscriptions(s.subscriptions);
       if (s.activeProfileId && !s.profiles.some(function (p) { return p.id === s.activeProfileId; })) {
         s.activeProfileId = null;
       }
@@ -121,6 +158,7 @@
     return getSettings().then(function (current) {
       var next = Object.assign({}, current, patch || {});
       if (patch && patch.rules) next.rules = normalizeRules(patch.rules);
+      if (patch && patch.subscriptions) next.subscriptions = normalizeSubscriptions(patch.subscriptions);
       if (patch && patch.profiles) {
         next.profiles = patch.profiles.map(sanitizeProfile).filter(Boolean).slice(0, 500);
       }
@@ -153,6 +191,7 @@
       profiles: s.profiles,
       activeProfileId: s.activeProfileId,
       rules: s.rules,
+      subscriptions: s.subscriptions,
       proxyPort: s.proxyPort,
       httpPort: s.httpPort
     };
@@ -457,7 +496,7 @@
     return XS.vless.decodeUtf8(bytes);
   }
 
-  async function fetchSubscription(rawUrl) {
+  async function fetchSubscriptionText(rawUrl) {
     var url = String(rawUrl || "").trim();
     if (url.length > 4096) throw new Error("Слишком длинный URL подписки");
     var pattern = XS.originPattern(url);
@@ -485,11 +524,209 @@
     if (!res.ok) throw new Error("Подписка вернула HTTP " + res.status);
     var text = await readLimitedText(res, MAX_SUBSCRIPTION_BYTES);
     if (!text.trim()) throw new Error("Подписка пустая");
-    var result = await importProfiles(text, url);
-    if (!result.added && !result.skipped) {
-      throw new Error("В подписке не найдено VLESS-ссылок");
+    return { url: url, text: text };
+  }
+
+  function buildSubscriptionProfiles(parsed, url, keepProfiles) {
+    var used = {};
+    var usedNames = {};
+    keepProfiles.forEach(function (p) {
+      used[profileKey(p)] = true;
+      usedNames[p.name] = true;
+    });
+    var out = [];
+    var errors = parsed.errors.slice();
+    var warnings = [];
+    for (var i = 0; i < parsed.items.length && out.length < 500; i++) {
+      var item = parsed.items[i];
+      var key = "link:" + item.link;
+      if (used[key]) continue;
+      var name = uniqueName(item.meta.name, usedNames);
+      var profile = sanitizeProfile({
+        id: XS.uid(),
+        name: name,
+        link: item.link,
+        meta: item.meta,
+        sourceUrl: url,
+        createdAt: Date.now()
+      });
+      if (!profile) {
+        errors.push("Пропущена некорректная VLESS-ссылка");
+        continue;
+      }
+      used[key] = true;
+      usedNames[name] = true;
+      out.push(profile);
+      if (item.meta && item.meta.warnings) {
+        item.meta.warnings.forEach(function (warning) {
+          warnings.push(name + ": " + warning);
+        });
+      }
     }
+    return {
+      profiles: out,
+      skipped: parsed.skipped,
+      errors: errors.slice(0, 12),
+      warnings: warnings.slice(0, 12)
+    };
+  }
+
+  async function applySubscriptionProfiles(url, parsed) {
+    var s = await getSettings();
+    var oldActive = s.profiles.filter(function (p) { return p.id === s.activeProfileId; })[0];
+    var keep = s.profiles.filter(function (p) { return p.sourceUrl !== url; });
+    var built = buildSubscriptionProfiles(parsed, url, keep);
+    var nextProfiles = keep.concat(built.profiles).slice(0, 500);
+    var nextActive = s.activeProfileId;
+    if (!nextProfiles.some(function (p) { return p.id === nextActive; })) {
+      var sameLink = oldActive
+        ? built.profiles.filter(function (p) { return p.link === oldActive.link; })[0]
+        : null;
+      nextActive = sameLink
+        ? sameLink.id
+        : (built.profiles[0] ? built.profiles[0].id : (nextProfiles[0] ? nextProfiles[0].id : null));
+    }
+    s = await saveSettings({ profiles: nextProfiles, activeProfileId: nextActive });
+    return {
+      added: built.profiles.length,
+      replaced: s.profiles.filter(function (p) { return p.sourceUrl === url; }).length,
+      skipped: built.skipped,
+      errors: built.errors,
+      warnings: built.warnings,
+      activeProfileId: s.activeProfileId
+    };
+  }
+
+  async function upsertSubscription(url, result, error) {
+    var s = await getSettings();
+    var now = Date.now();
+    var subs = s.subscriptions.slice();
+    var index = -1;
+    for (var i = 0; i < subs.length; i++) {
+      if (subs[i].url === url) { index = i; break; }
+    }
+    var base = {
+      name: XS.hostFromUrl(url) || "subscription",
+      intervalMin: 360,
+      addedAt: now
+    };
+    var total = result ? (result.replaced != null ? result.replaced : result.added) : 0;
+    if (index === -1) {
+      subs.push(Object.assign({}, base, {
+        id: XS.uid(),
+        url: url,
+        lastFetched: now,
+        lastError: error || "",
+        profileCount: total
+      }));
+    } else {
+      subs[index] = Object.assign({}, subs[index], {
+        lastFetched: now,
+        lastError: error || "",
+        profileCount: result ? total : subs[index].profileCount
+      });
+    }
+    await saveSettings({ subscriptions: subs });
+  }
+
+  async function fetchSubscription(rawUrl) {
+    var fetched = await fetchSubscriptionText(rawUrl);
+    var parsed = XS.vless.parseMany(fetched.text);
+    if (!parsed.items.length) throw new Error("В подписке не найдено VLESS-ссылок");
+    var result = await applySubscriptionProfiles(fetched.url, parsed);
+    await upsertSubscription(fetched.url, result, "");
     return result;
+  }
+
+  async function refreshSubscriptionById(id) {
+    var s = await getSettings();
+    var sub = s.subscriptions.filter(function (x) { return x.id === id; })[0];
+    if (!sub) throw new Error("Подписка не найдена");
+    try {
+      var fetched = await fetchSubscriptionText(sub.url);
+      var parsed = XS.vless.parseMany(fetched.text);
+      if (!parsed.items.length) throw new Error("В подписке не найдено VLESS-ссылок");
+      var result = await applySubscriptionProfiles(sub.url, parsed);
+      await upsertSubscription(sub.url, result, "");
+      return result;
+    } catch (err) {
+      await upsertSubscription(sub.url, null, XS.errorText(err));
+      throw err;
+    }
+  }
+
+  async function deleteSubscriptionById(id, keepProfiles) {
+    var s = await getSettings();
+    var sub = s.subscriptions.filter(function (x) { return x.id === id; })[0];
+    if (!sub) throw new Error("Подписка не найдена");
+    var patch = { subscriptions: s.subscriptions.filter(function (x) { return x.id !== id; }) };
+    if (!keepProfiles) {
+      var profiles = s.profiles.filter(function (p) { return p.sourceUrl !== sub.url; });
+      patch.profiles = profiles;
+      if (s.activeProfileId && !profiles.some(function (p) { return p.id === s.activeProfileId; })) {
+        patch.activeProfileId = profiles[0] ? profiles[0].id : null;
+      }
+    }
+    s = await saveSettings(patch);
+    return s;
+  }
+
+  var refreshingSubscriptions = false;
+  async function refreshDueSubscriptions() {
+    if (refreshingSubscriptions) return;
+    refreshingSubscriptions = true;
+    try {
+      var s = await getSettings();
+      var now = Date.now();
+      for (var i = 0; i < s.subscriptions.length; i++) {
+        var sub = s.subscriptions[i];
+        if (sub.lastFetched && now - sub.lastFetched < sub.intervalMin * 60000) continue;
+        try {
+          await refreshSubscriptionById(sub.id);
+        } catch (_) {}
+      }
+    } finally {
+      refreshingSubscriptions = false;
+    }
+  }
+
+  async function testProfiles() {
+    var s = await getSettings();
+    if (!s.profiles.length) throw new Error("Нет профилей для проверки");
+    var previous = state.status;
+    var wasRunning = !!(previous && previous.running);
+    var previousId = previous && previous.profileId;
+    var results = [];
+
+    for (var i = 0; i < s.profiles.length; i++) {
+      var profile = s.profiles[i];
+      var item = { id: profile.id, name: profile.name, ok: false, latencyMs: 0, error: "" };
+      try {
+        state.status = await XS.api.start(profile.id, profile.name, outboundForProfile(profile));
+        var health = await XS.api.health("https://www.gstatic.com/generate_204");
+        item.ok = !!(health && health.ok);
+        item.latencyMs = (health && health.latencyMs) || 0;
+        item.error = (health && health.error) || (item.ok ? "" : "нет ответа");
+      } catch (err) {
+        item.error = XS.errorText(err);
+      }
+      results.push(item);
+    }
+
+    // Restore the profile that was active before the test.
+    try {
+      if (wasRunning && previousId) {
+        var prev = s.profiles.filter(function (p) { return p.id === previousId; })[0];
+        state.status = prev
+          ? await XS.api.start(prev.id, prev.name, outboundForProfile(prev))
+          : await XS.api.stop();
+      } else {
+        state.status = await XS.api.stop();
+      }
+    } catch (_) {}
+    await applyProxy(s, state.status);
+    updateBadge(s, state.status, state.coreError || state.proxyError);
+    return { ok: true, results: results, restoredProfileId: wasRunning ? previousId : null };
   }
 
   /* --------------------------------------------------------------- messages */
@@ -595,6 +832,37 @@
       return Object.assign({}, await snapshot(), { importResult: sub });
     }
 
+    if (type === "refreshSubscription") {
+      var refreshed = await refreshSubscriptionById(String(msg.id || ""));
+      var rs = await getSettings();
+      if (rs.mode !== "off" && refreshed.added) await syncAll({ startIfNeeded: true });
+      return Object.assign({}, await snapshot(), { refreshResult: refreshed });
+    }
+
+    if (type === "refreshAllSubscriptions") {
+      await refreshDueSubscriptions();
+      return snapshot();
+    }
+
+    if (type === "deleteSubscription") {
+      var afterDelete = await deleteSubscriptionById(String(msg.id || ""), msg.keepProfiles === true);
+      await applyProxy(afterDelete, state.status);
+      return snapshot();
+    }
+
+    if (type === "setSubscriptionInterval") {
+      var intervalMin = parseInt(msg.intervalMin, 10);
+      if (!isFinite(intervalMin) || intervalMin < 30 || intervalMin > 10080) {
+        throw new Error("Интервал должен быть от 30 минут до 7 дней");
+      }
+      var beforeInterval = await getSettings();
+      var updatedSubs = beforeInterval.subscriptions.map(function (x) {
+        return x.id === msg.id ? Object.assign({}, x, { intervalMin: intervalMin }) : x;
+      });
+      await saveSettings({ subscriptions: updatedSubs });
+      return snapshot();
+    }
+
     if (type === "deleteProfile") {
       var dels = await getSettings();
       var target = dels.profiles.filter(function (p) { return p.id === msg.id; })[0];
@@ -679,6 +947,70 @@
       await XS.api.ensure(true);
       await syncAll({ startIfNeeded: true });
       return snapshot();
+    }
+
+    if (type === "testProfiles") {
+      var tested = await testProfiles();
+      return Object.assign({}, await snapshot(), { testResult: tested });
+    }
+
+    if (type === "diagnostics") {
+      var diag = await getSettings();
+      var diagLogs = [];
+      try {
+        var logPayload = await XS.api.logs(300);
+        diagLogs = (logPayload && logPayload.logs) || [];
+      } catch (_) {}
+      return {
+        ok: true,
+        generatedAt: new Date().toISOString(),
+        extension: {
+          version: XS.runtimeVersion(),
+          nativeHost: XS.NATIVE_HOST,
+          isFirefox: XS.isFirefox
+        },
+        settings: {
+          mode: diag.mode,
+          lastMode: diag.lastMode,
+          paused: diag.paused,
+          autoConnect: diag.autoConnect,
+          bypassLocal: diag.bypassLocal,
+          profiles: diag.profiles.map(function (p) {
+            var meta = p.meta || {};
+            return {
+              name: p.name,
+              address: meta.address || "",
+              port: meta.port || 0,
+              security: meta.security || "none",
+              network: meta.network || "tcp",
+              source: p.sourceUrl ? "subscription" : "manual"
+            };
+          }),
+          rules: diag.rules.map(function (r) {
+            return { pattern: r.pattern, action: r.action };
+          }),
+          subscriptions: diag.subscriptions.map(function (s) {
+            return {
+              name: s.name,
+              intervalMin: s.intervalMin,
+              lastFetched: s.lastFetched,
+              lastError: s.lastError,
+              profileCount: s.profileCount
+            };
+          })
+        },
+        status: state.status,
+        helperError: state.helperError,
+        coreError: state.coreError,
+        proxyError: state.proxyError,
+        logs: diagLogs.map(function (l) {
+          return {
+            time: l.time,
+            level: l.level,
+            message: redactSensitive(l.message)
+          };
+        })
+      };
     }
 
     if (type === "getLogs") {
@@ -768,16 +1100,21 @@
     } catch (_) {}
   }
 
-  function ensureAlarm() {
+  function ensureOneAlarm(name, minutes) {
     try {
-      Promise.resolve(api.alarms.get("xs-sync")).then(function (alarm) {
-        if (!alarm) api.alarms.create("xs-sync", { periodInMinutes: 1 });
+      Promise.resolve(api.alarms.get(name)).then(function (alarm) {
+        if (!alarm) api.alarms.create(name, { periodInMinutes: minutes });
       }).catch(function () {
-        api.alarms.create("xs-sync", { periodInMinutes: 1 });
+        try { api.alarms.create(name, { periodInMinutes: minutes }); } catch (_) {}
       });
     } catch (_) {
-      try { api.alarms.create("xs-sync", { periodInMinutes: 1 }); } catch (__) {}
+      try { api.alarms.create(name, { periodInMinutes: minutes }); } catch (__) {}
     }
+  }
+
+  function ensureAlarm() {
+    ensureOneAlarm("xs-sync", 1);
+    ensureOneAlarm("xs-subscriptions", 15);
   }
 
   api.runtime.onInstalled.addListener(function (details) {
@@ -796,10 +1133,13 @@
   api.runtime.onStartup.addListener(function () {
     ensureAlarm();
     syncAll({ startIfNeeded: true });
+    refreshDueSubscriptions();
   });
 
   api.alarms.onAlarm.addListener(function (alarm) {
-    if (alarm && alarm.name === "xs-sync") syncAll({ startIfNeeded: true });
+    if (!alarm) return;
+    if (alarm.name === "xs-sync") syncAll({ startIfNeeded: true });
+    if (alarm.name === "xs-subscriptions") refreshDueSubscriptions();
   });
 
   if (api.contextMenus && api.contextMenus.onClicked) {

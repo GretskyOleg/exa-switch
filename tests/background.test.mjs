@@ -35,13 +35,14 @@ function createEnv(options = {}) {
     }
   };
 
+  let subBody = [
+    `vless://22222222-3333-4444-5555-666666666666@sub.example.com:443?security=tls&type=ws&path=%2Fsub#FromSub`
+  ].join("\n");
+
   async function mockFetch(url, options = {}) {
     const parsed = new URL(url);
     if (parsed.hostname === "sub.example") {
-      const body = [
-        `vless://22222222-3333-4444-5555-666666666666@sub.example.com:443?security=tls&type=ws&path=%2Fsub#FromSub`
-      ].join("\n");
-      return response(200, Buffer.from(body, "utf8").toString("base64"));
+      return response(200, Buffer.from(subBody, "utf8").toString("base64"));
     }
     if (!helper.online) throw new Error("Failed to fetch");
     const auth = options.headers ? (options.headers.Authorization || options.headers.authorization) : "";
@@ -190,7 +191,8 @@ function createEnv(options = {}) {
 
   return {
     sandbox, chrome, helper, storage, calls, send, listeners,
-    setActiveTab(url) { activeTab = { id: 7, url, title: "Test" }; }
+    setActiveTab(url) { activeTab = { id: 7, url, title: "Test" }; },
+    setSubBody(text) { subBody = text; }
   };
 }
 
@@ -295,6 +297,48 @@ test("background: subscription import", async () => {
   assert.equal(result.importResult.added, 1);
   assert.equal(env.storage.profiles.length, 1);
   assert.equal(env.storage.profiles[0].sourceUrl, "https://sub.example/sub");
+});
+
+test("background: subscription refresh replaces its profiles", async () => {
+  const env = createEnv();
+  await new Promise((r) => setTimeout(r, 20));
+  const first = await env.send({ type: "fetchSubscription", url: "https://sub.example/sub" });
+  assert.equal(first.ok, true, first.error);
+  const sub = first.settings.subscriptions[0];
+  assert.ok(sub && sub.url === "https://sub.example/sub");
+
+  env.setSubBody([
+    `vless://33333333-4444-5555-6666-777777777777@new.example.com:443?security=tls&type=ws&path=%2Fnew#Renamed`
+  ].join("\n"));
+  const refreshed = await env.send({ type: "refreshSubscription", id: sub.id });
+  assert.equal(refreshed.ok, true, refreshed.error);
+  assert.equal(refreshed.settings.profiles.length, 1);
+  assert.match(refreshed.settings.profiles[0].name, /Renamed/);
+  assert.equal(refreshed.settings.profiles[0].sourceUrl, "https://sub.example/sub");
+  assert.equal(refreshed.settings.subscriptions[0].lastError, "");
+});
+
+test("background: diagnostics redacts UUIDs and tokens", async () => {
+  const env = createEnv();
+  await new Promise((r) => setTimeout(r, 20));
+  await env.send({ type: "addProfiles", text: LINK });
+  const diag = await env.send({ type: "diagnostics" });
+  assert.equal(diag.ok, true, diag.error);
+  const text = JSON.stringify(diag);
+  assert.equal(text.includes(UUID), false);
+  assert.equal(text.includes(TOKEN), false);
+  assert.equal(diag.settings.profiles.length, 1);
+});
+
+test("background: testProfiles measures and restores the active profile", async () => {
+  const env = createEnv();
+  await new Promise((r) => setTimeout(r, 20));
+  await env.send({ type: "addProfiles", text: LINK });
+  const res = await env.send({ type: "testProfiles" });
+  assert.equal(res.ok, true, res.error);
+  assert.equal(res.testResult.results.length, 1);
+  assert.equal(res.testResult.results[0].ok, true);
+  assert.equal(res.status.running, true);
 });
 
 test("background: missing native host is reported and proxy is cleared", async () => {

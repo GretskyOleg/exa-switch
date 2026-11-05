@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "EXA Switch — VLESS по сайтам",
   "short_name": "EXA Switch",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "EXA Switch: VLESS/Reality через локальный xray-core. Проксируйте только нужные сайты. Правила как в SwitchyOmega.",
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkic5B6kovP5B61ZzwAZZbYjdfsmhiM30UgjFl4+ZME6zwlWrYadQRUJWXsydMAxIRthENXInoPVOxlx2/DY9humB+uhESDzbTAPYrLrPxR3yN5ztQZppTj54tNdbsEsIQfN3Z+9fxod2TVba6b7qIAW/FJqz6RnYH8cezQ0eB1kqF2LFImDDDA/eeVLLbsc88nuDIO/dsmVyFCHuDLRg4XN/llmvfqX2JfbI1nkP51KpAqpbzfOvDovybL+B1WicqniggEDHQum70tgO35JML1YI2qfA74jTp3Kr5ONYQQAmN6mWi6tXyKUbeMr5zTqHDc/7qu71iL9E76f4paEQqwIDAQAB",

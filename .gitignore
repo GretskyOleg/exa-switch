@@ -7,3 +7,5 @@ packaging/.build/
 packaging/.keys/
 *.pem
 .test-config/
+__pycache__/
+*.pyc

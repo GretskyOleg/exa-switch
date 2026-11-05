@@ -6,18 +6,22 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOST_NAME="com.oleg.xray_switch"
 FIREFOX_ID="xray-switch@oleg.dev"
 START=1
+BROWSERS_ARG=""
 
 for arg in "$@"; do
   case "$arg" in
     --no-start) START=0 ;;
+    --browsers=*) BROWSERS_ARG="${arg#*=}" ;;
     -h|--help)
       cat <<'EOF'
-Usage: ./install.sh [--no-start]
+Usage: ./install.sh [--no-start] [--browsers=LIST]
 
 Installs the helper to the user data directory and registers native messaging
 for Chrome, Chromium, Brave, Edge, Vivaldi and Firefox.
 
-  --no-start   do not start the helper after installation
+  --no-start       do not start the helper after installation
+  --browsers=LIST  also install the CRX into these Chromium browsers
+                   (chrome,chromium,edge,brave,vivaldi or all)
 EOF
       exit 0
       ;;
@@ -175,34 +179,12 @@ echo "Helper:      $BIN"
 CRX_SRC="$ROOT/dist/release/exa-switch-chrome.crx"
 if [ -f "$CRX_SRC" ]; then
   install -m 0644 "$CRX_SRC" "$DATA_DIR/exa-switch.crx"
-  if [ "$OS" = "linux" ]; then
-    CHROME_CFG_DIRS=(
-      "$HOME/.config/google-chrome"
-      "$HOME/.config/google-chrome-beta"
-      "$HOME/.config/chromium"
-      "$HOME/.config/BraveSoftware/Brave-Browser"
-      "$HOME/.config/microsoft-edge"
-      "$HOME/.config/vivaldi"
-    )
+  if [ -n "$BROWSERS_ARG" ]; then
+    XS_ROOT="$DATA_DIR" "$ROOT/scripts/xray-switch-browsers" install "$BROWSERS_ARG" || true
   else
-    CHROME_CFG_DIRS=(
-      "$HOME/Library/Application Support/Google/Chrome"
-      "$HOME/Library/Application Support/Google/Chrome Canary"
-      "$HOME/Library/Application Support/Chromium"
-      "$HOME/Library/Application Support/BraveSoftware/Brave-Browser"
-      "$HOME/Library/Application Support/Microsoft Edge"
-      "$HOME/Library/Application Support/Vivaldi"
-    )
+    echo "Chrome/Chromium/Edge/Brave/Vivaldi: выберите браузеры командой"
+    echo "  XS_ROOT=\"$DATA_DIR\" $ROOT/scripts/xray-switch-browsers install all"
   fi
-  for dir in "${CHROME_CFG_DIRS[@]}"; do
-    if [ -d "$dir" ]; then
-      mkdir -p "$dir/External Extensions"
-      printf '{"external_crx": "%s", "external_version": "%s"}\n' \
-        "$DATA_DIR/exa-switch.crx" "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$ROOT/extension/manifest.chrome.json")" \
-        > "$dir/External Extensions/$CHROME_ID.json"
-    fi
-  done
-  echo "Chrome/Chromium/Edge/Brave: CRX установится при следующем запуске."
 fi
 
 FF_XPI="$ROOT/dist/release/exa-switch-firefox-signed.xpi"

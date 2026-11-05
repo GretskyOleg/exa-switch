@@ -12,9 +12,21 @@
 ## Документация
 
 - [docs/OVERVIEW.md](docs/OVERVIEW.md) — что это, зачем нужно, архитектура, где хранятся данные, ограничения.
+- [docs/QUICKSTART.md](docs/QUICKSTART.md) — **простая инструкция для новичков**: куда нажать, что вставить, как включить.
 - [docs/INSTALL-LINUX.md](docs/INSTALL-LINUX.md) — установка пакета (Arch/CachyOS), где появляется расширение, служба, обновление, удаление.
 - [docs/INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md) — установка на Windows 10/11, автозапуск, Firefox и Chrome/Edge/Brave/Vivaldi.
 - [docs/SECURITY.md](docs/SECURITY.md) — модель угроз, аудит безопасности, исправления и остаточные риски.
+
+## Быстрый старт для чайников
+
+1. Скачай `EXA-Switch-Setup-windows-amd64.exe` из [релиза](https://github.com/GretskyOleg/exa-switch/releases/latest) и запусти.
+2. На вопрос о браузерах нажми **Enter** (Firefox) или напиши `1,2`.
+3. Перезапусти Firefox.
+4. Иконка **пазла** → **EXA Switch** → шестерёнка → вставь `vless://...` → **Импортировать**.
+5. Выбери режим **Авто**, открой сайт и нажми **Прокси** в popup.
+
+Подробно, с картинками действий и разбором ошибок — в
+[docs/QUICKSTART.md](docs/QUICKSTART.md).
 
 ---
 
@@ -72,9 +84,9 @@ API слушает только `127.0.0.1`, проверяет `Host`, `Origin`
 |---|---|---|
 | Windows 10/11 x64 | `EXA-Switch-Setup-windows-amd64.exe` | запустить `.exe` |
 | Windows 11 ARM | `EXA-Switch-Setup-windows-arm64.exe` | запустить `.exe` |
-| Linux x86_64 (Debian/Ubuntu) | `exa-switch_0.1.0_amd64.deb` | `sudo apt install ./exa-switch_0.1.0_amd64.deb` |
-| Linux x86_64 (Fedora/RHEL) | `exa-switch-0.1.0-1.x86_64.rpm` | `sudo dnf install ./exa-switch-0.1.0-1.x86_64.rpm` |
-| Linux x86_64 (Arch/CachyOS) | `exa-switch-0.1.1-1-x86_64.pkg.tar.zst` | `sudo pacman -U ./exa-switch-0.1.1-1-x86_64.pkg.tar.zst` |
+| Linux x86_64 (Debian/Ubuntu) | `exa-switch_0.1.2_amd64.deb` | `sudo apt install ./exa-switch_0.1.2_amd64.deb` |
+| Linux x86_64 (Fedora/RHEL) | `exa-switch-0.1.2-1.x86_64.rpm` | `sudo dnf install ./exa-switch-0.1.2-1.x86_64.rpm` |
+| Linux x86_64 (Arch/CachyOS) | `exa-switch-0.1.2-1-x86_64.pkg.tar.zst` | `sudo pacman -U ./exa-switch-0.1.2-1-x86_64.pkg.tar.zst` |
 | Linux x86_64 portable | `EXA-Switch-Setup-linux-amd64` | `chmod +x` и запустить (без root) |
 | Linux ARM64 | `.deb` / `.rpm` / `EXA-Switch-Setup-linux-arm64` | аналогично |
 | macOS Apple Silicon | `EXA-Switch-Setup-macos-arm64.zip` | распаковать и запустить `EXA Switch Setup.app` |
@@ -84,8 +96,9 @@ API слушает только `127.0.0.1`, проверяет `Host`, `Origin`
 **Firefox** получает подписанный XPI автоматически (Linux — через policy
 `Extensions.Install` + `Locked`, Windows — в профиль + `user.js`).
 **Chrome/Chromium/Edge/Brave/Vivaldi** получают подписанный CRX как external
-extension и ставятся при следующем запуске браузера (Chrome может показать
-один запрос подтверждения). Если external extension не сработал — остаётся
+extension. На Windows браузеры выбираются при установке; на Linux —
+`xray-switch-browsers install chrome,edge` (или `all`). Chrome может показать
+один запрос подтверждения. Если external extension не сработал — остаётся
 ручной `Load unpacked`, установщик откроет страницу с точными путями.
 
 - **Chrome / Chromium / Edge / Brave:** automatic CRX / `chrome://extensions` → Developer mode → Load unpacked → папка из setup-страницы.

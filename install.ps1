@@ -19,7 +19,7 @@ $Exe = Join-Path $DataDir "xray-switch-helper.exe"
 $ChromeCrx = Join-Path $Root "dist\release\exa-switch-chrome.crx"
 $FirefoxXpi = Join-Path $Root "dist\release\exa-switch-firefox-signed.xpi"
 $ChromeManifestPath = Join-Path $Root "dist\chrome\manifest.json"
-$Version = "0.1.1"
+$Version = "0.1.2"
 if (Test-Path $ChromeManifestPath) {
     $Version = (Get-Content $ChromeManifestPath -Raw | ConvertFrom-Json).version
 }

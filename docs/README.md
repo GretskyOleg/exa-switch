@@ -2,6 +2,8 @@
 
 - **[OVERVIEW.md](OVERVIEW.md)** — что это, зачем нужно, как устроено, где хранятся
   данные и какие есть ограничения.
+- **[QUICKSTART.md](QUICKSTART.md)** — простая пошаговая инструкция для новичков
+  (Windows и Linux): что скачать, куда нажать, что вставить.
 - **[INSTALL-LINUX.md](INSTALL-LINUX.md)** — установка пакета на Arch/CachyOS,
   где появляется расширение, управление службой, обновление и удаление.
 - **[INSTALL-WINDOWS.md](INSTALL-WINDOWS.md)** — установка на Windows 10/11,
@@ -12,7 +14,7 @@
 Коротко:
 
 ```bash
-sudo pacman -U exa-switch-0.1.1-1-x86_64.pkg.tar.zst
+sudo pacman -U exa-switch-0.1.2-1-x86_64.pkg.tar.zst
 # перезапустить Firefox
 # about:addons → EXA Switch (уже включено)
 # настройки → вставить vless:// → Импортировать → режим «Авто»

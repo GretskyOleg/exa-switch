@@ -5,6 +5,7 @@
   var XS = globalThis.XS;
   var api = XS.browser;
   var current = null;
+  var testResults = {};
   var toastTimer = null;
   var logsTimer = null;
   var logsBusy = false;
@@ -95,6 +96,8 @@
 
   function renderProfiles(s) {
     setText("profileCount", s.profiles.length);
+    var welcome = $("welcomeCard");
+    if (welcome) welcome.classList.toggle("hidden", s.profiles.length > 0);
     var list = $("profilesList");
     clear(list);
 
@@ -130,6 +133,11 @@
         meta.security || "none"));
       badges.appendChild(el("span", "badge net", meta.network || "tcp"));
       if (p.sourceUrl) badges.appendChild(el("span", "badge", "подписка"));
+      var tr = testResults[p.id];
+      if (tr) {
+        badges.appendChild(el("span", "badge " + (tr.ok ? "reality" : ""),
+          tr.ok ? (Math.round(tr.latencyMs || 0) + " мс") : "ошибка"));
+      }
       main.appendChild(badges);
 
       var del = el("button", "btn-del", "Удалить");
@@ -201,12 +209,68 @@
     install.style.borderColor = res.helperError ? "rgba(239,68,68,.35)" : "";
   }
 
+  function subIntervalLabel(min) {
+    if (min < 60) return min + " мин";
+    if (min < 1440) return Math.round(min / 60) + " ч";
+    return Math.round(min / 1440) + " д";
+  }
+
+  function renderSubscriptions(s) {
+    var subs = Array.isArray(s.subscriptions) ? s.subscriptions : [];
+    setText("subsCount", subs.length);
+    var list = $("subsList");
+    clear(list);
+    if (!subs.length) {
+      list.appendChild(el("div", "empty",
+        "Подписок нет. Вставьте URL подписки в поле выше и нажмите «Импортировать»."));
+      return;
+    }
+    subs.forEach(function (sub) {
+      var row = el("div", "sub-row");
+      var main = el("div", "sub-main");
+      main.appendChild(el("div", "sub-url", sub.url));
+      var metaText = "Профилей: " + (sub.profileCount || 0) +
+        " · обновлено: " + (sub.lastFetched ? XS.fmtTime(sub.lastFetched) : "ещё нет");
+      var meta = el("div", "sub-meta" + (sub.lastError ? " err" : ""),
+        sub.lastError ? ("Ошибка: " + sub.lastError) : metaText);
+      main.appendChild(meta);
+      row.appendChild(main);
+
+      var actions = el("div", "sub-actions");
+      var select = document.createElement("select");
+      select.setAttribute("data-sub-interval", sub.id);
+      select.title = "Интервал автообновления";
+      [30, 60, 180, 360, 720, 1440, 10080].forEach(function (min) {
+        var option = document.createElement("option");
+        option.value = String(min);
+        option.textContent = subIntervalLabel(min);
+        option.selected = sub.intervalMin === min;
+        select.appendChild(option);
+      });
+      actions.appendChild(select);
+
+      var refresh = el("button", "btn ghost small", "Обновить");
+      refresh.type = "button";
+      refresh.setAttribute("data-sub-refresh", sub.id);
+      actions.appendChild(refresh);
+
+      var del = el("button", "btn-del", "Удалить");
+      del.type = "button";
+      del.setAttribute("data-sub-del", sub.id);
+      actions.appendChild(del);
+
+      row.appendChild(actions);
+      list.appendChild(row);
+    });
+  }
+
   function render(res) {
     if (!res || !res.settings) return;
     current = res;
     renderHeader(res);
     renderProfiles(res.settings);
     renderRules(res.settings);
+    renderSubscriptions(res.settings);
     renderHelper(res);
   }
 
@@ -256,6 +320,23 @@
     }
   }
 
+  function autoCheckTunnel() {
+    toast("Проверяем туннель…");
+    return send({ type: "connect" }).then(function (res) {
+      render(res);
+      return send({ type: "health" });
+    }).then(function (res) {
+      var h = res.health || {};
+      if (h.ok) {
+        toast("Туннель работает · " + Math.round(h.latencyMs || 0) + " мс");
+      } else {
+        toast("Профиль добавлен, но проверка не удалась: " + (h.error || "нет ответа"), true);
+      }
+    }).catch(function (err) {
+      toast("Профиль добавлен, но подключиться не удалось: " + XS.errorText(err), true);
+    });
+  }
+
   function importConfig() {
     var text = $("importText").value.trim();
     if (!text) {
@@ -292,6 +373,7 @@
       if (res.importResult && res.importResult.added) {
         $("importText").value = "";
         toast("Импортировано профилей: " + res.importResult.added);
+        if ($("autoCheck") && $("autoCheck").checked) autoCheckTunnel();
       } else {
         toast("Новых профилей нет", true);
       }
@@ -421,6 +503,51 @@
 
   /* --------------------------------------------------------------- listeners */
 
+  function testAllProfiles() {
+    var btn = $("testProfilesBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Проверяем…";
+    }
+    testResults = {};
+    toast("Проверяем профили по очереди…");
+    send({ type: "testProfiles" }).then(function (res) {
+      var results = (res.testResult && res.testResult.results) || [];
+      results.forEach(function (r) { testResults[r.id] = r; });
+      render(res);
+      var ok = results.filter(function (r) { return r.ok; }).length;
+      toast("Работают " + ok + " из " + results.length + " профилей");
+    }).catch(function (err) {
+      toast(XS.errorText(err), true);
+    }).finally(function () {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Проверить все";
+      }
+    });
+  }
+
+  function downloadDiagnostics() {
+    var btn = $("downloadDiagBtn");
+    if (btn) btn.disabled = true;
+    send({ type: "diagnostics" }).then(function (res) {
+      var blob = new Blob([JSON.stringify(res, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "exa-switch-diagnostics-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+      toast("Диагностика сохранена (без UUID и токенов)");
+    }).catch(function (err) {
+      toast(XS.errorText(err), true);
+    }).finally(function () {
+      if (btn) btn.disabled = false;
+    });
+  }
+
   function bind() {
     document.querySelectorAll(".nav-item").forEach(function (btn) {
       btn.addEventListener("click", function () { showTab(btn.getAttribute("data-tab")); });
@@ -451,6 +578,8 @@
       });
     });
 
+    $("testProfilesBtn").addEventListener("click", testAllProfiles);
+
     $("rulesMode").addEventListener("click", function (e) {
       var btn = e.target.closest ? e.target.closest("button[data-mode]") : null;
       if (!btn) return;
@@ -468,6 +597,42 @@
       var btn = e.target.closest ? e.target.closest("[data-del-rule]") : null;
       if (!btn) return;
       send({ type: "deleteRule", id: btn.getAttribute("data-del-rule") }).then(render).catch(function (err) {
+        toast(XS.errorText(err), true);
+      });
+    });
+
+    $("subsList").addEventListener("click", function (e) {
+      var refresh = e.target.closest ? e.target.closest("[data-sub-refresh]") : null;
+      if (refresh) {
+        send({ type: "refreshSubscription", id: refresh.getAttribute("data-sub-refresh") }).then(function (res) {
+          render(res);
+          var rr = res.refreshResult || {};
+          toast("Подписка обновлена: +" + (rr.added || 0) + " профилей");
+        }).catch(function (err) {
+          toast(XS.errorText(err), true);
+        });
+        return;
+      }
+      var del = e.target.closest ? e.target.closest("[data-sub-del]") : null;
+      if (del) {
+        if (!confirm("Удалить подписку и все её профили?")) return;
+        send({ type: "deleteSubscription", id: del.getAttribute("data-sub-del") }).then(function (res) {
+          render(res);
+          toast("Подписка удалена");
+        }).catch(function (err) {
+          toast(XS.errorText(err), true);
+        });
+      }
+    });
+
+    $("subsList").addEventListener("change", function (e) {
+      var id = e.target && e.target.getAttribute("data-sub-interval");
+      if (!id) return;
+      send({
+        type: "setSubscriptionInterval",
+        id: id,
+        intervalMin: parseInt(e.target.value, 10)
+      }).then(render).catch(function (err) {
         toast(XS.errorText(err), true);
       });
     });
@@ -516,6 +681,8 @@
         toast("Логи скопированы");
       }).catch(function () { toast("Не удалось скопировать", true); });
     });
+
+    $("downloadDiagBtn").addEventListener("click", downloadDiagnostics);
 
     $("copyInstallBtn").addEventListener("click", function () {
       navigator.clipboard.writeText("./install.sh").then(function () {

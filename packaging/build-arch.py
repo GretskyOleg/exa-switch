@@ -136,24 +136,11 @@ _xs_setup() {
       fi
     done
 
-    # Chrome/Chromium/Edge/Brave/Vivaldi: external CRX, installed by the
-    # browser on its next start (Chrome may show a one-time prompt).
-    _id="__CHROME_ID__"
-    _crx="/usr/share/xray-switch/exa-switch.crx"
-    if [ -f "$_crx" ]; then
-      for _root in \
-        "$_home/.config/google-chrome" \
-        "$_home/.config/google-chrome-beta" \
-        "$_home/.config/chromium" \
-        "$_home/.config/BraveSoftware/Brave-Browser" \
-        "$_home/.config/microsoft-edge" \
-        "$_home/.config/vivaldi"; do
-        if [ -d "$_root" ]; then
-          mkdir -p "$_root/External Extensions"
-          printf '{"external_crx": "%s", "external_version": "%s"}\n' "$_crx" "__APP_VERSION__" > "$_root/External Extensions/$_id.json"
-          chown "$_u":"$(id -gn "$_u")" "$_root/External Extensions" "$_root/External Extensions/$_id.json" 2>/dev/null || true
-        fi
-      done
+    # Chrome-family is opt-in: the user chooses browsers explicitly.
+    if [ -f /usr/share/xray-switch/exa-switch.crx ]; then
+      echo "  Chrome/Chromium/Edge/Brave/Vivaldi: выберите браузеры командой"
+      echo "    xray-switch-browsers install all"
+      echo "  (или, например: xray-switch-browsers install chrome,edge)"
     fi
 
     if [ -d "/run/user/$_uid" ]; then

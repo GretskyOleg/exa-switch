@@ -11,7 +11,7 @@
 ## 1. Установка пакета
 
 ```bash
-sudo pacman -U ./exa-switch-0.1.1-1-x86_64.pkg.tar.zst
+sudo pacman -U ./exa-switch-0.1.2-1-x86_64.pkg.tar.zst
 ```
 
 После установки:
@@ -23,6 +23,9 @@ sudo pacman -U ./exa-switch-0.1.1-1-x86_64.pkg.tar.zst
   удаляются автоматически.
 
 > Если Firefox был запущен во время установки — **перезапустите его**.
+
+Firefox ставится автоматически (policy). Chrome/Chromium/Edge/Brave/Vivaldi —
+**по выбору**: `xray-switch-browsers install chrome,edge` (подробнее ниже).
 
 ## 2. Где появляется расширение
 
@@ -53,12 +56,21 @@ cat /etc/firefox/policies/policies.json
 
 ### Chrome / Chromium / Brave / Edge
 
-Пакет кладёт подписанный **CRX** в `/usr/share/xray-switch/exa-switch.crx` и
-прописывает external extension для существующих профилей
-Chrome/Chromium/Edge/Brave/Vivaldi. Браузер поставит расширение при следующем
-запуске (Chrome/Edge могут показать один запрос подтверждения).
+Пакет кладёт подписанный **CRX** в `/usr/share/xray-switch/exa-switch.crx`, но
+не ставит его в браузеры автоматически. Выберите браузеры сами:
 
-Если расширение не появилось — откройте страницу настройки:
+```bash
+xray-switch-browsers list                 # что найдено и где
+xray-switch-browsers install chrome,edge  # поставить в выбранные
+xray-switch-browsers install all          # во все найденные
+xray-switch-browsers remove chrome        # убрать
+```
+
+Это per-user настройка: пишется `~/.config/<browser>/External Extensions/<id>.json`.
+После выбора **перезапустите браузер**; Chrome/Edge могут показать один запрос
+подтверждения. Firefox этой командой не управляется — он ставится policy пакета.
+
+Если external extension не сработал — откройте страницу настройки:
 
 ```bash
 xray-switch-setup
@@ -106,6 +118,7 @@ xray-switch-helper status                # JSON-статус через API
 |---|---|
 | `/opt/xray-switch/xray-switch-helper` | helper с xray-core |
 | `/usr/bin/xray-switch-helper` | symlink для CLI |
+| `/usr/bin/xray-switch-browsers` | выбор браузеров для Chrome-family |
 | `/usr/bin/xray-switch-setup` | открывает страницу настройки Chrome |
 | `/usr/lib/systemd/user/xray-switch.service` | user-служба |
 | `/etc/systemd/user/default.target.wants/xray-switch.service` | автозапуск |
